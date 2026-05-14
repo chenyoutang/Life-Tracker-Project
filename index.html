@@ -73,11 +73,16 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 .node-label.l0{font-weight:700;font-size:15px}
 .node-label.l1{font-weight:600;font-size:14px}
 .node-label.l2{font-weight:500;font-size:13px}
-/* level blocks */
-.tree-block-0{background:linear-gradient(135deg,#f0f4ff,#e8f0ff);border:1px solid #c8d4f0;border-radius:9px;padding:4px 6px 4px 4px;margin-bottom:6px}
-.tree-block-1{background:linear-gradient(135deg,#f3f8f3,#e8f5e8);border:1px solid #c4dfc4;border-radius:7px;padding:3px 5px 3px 3px;margin:2px 0}
-.tree-block-2{background:linear-gradient(135deg,#fdf8f0,#faf0e4);border:1px solid #e8d8b8;border-radius:6px;padding:2px 4px 2px 3px;margin:1px 0}
-.tree-block-reg{background:#fafafa;border:1px solid #eeeeee;border-radius:5px;padding:1px 3px;margin:1px 0}
+/* 5 distinct level block colors, cycling back */
+.tree-block-0{background:linear-gradient(135deg,#e8eeff,#d8e4ff);border:1px solid #b0c4f8;border-radius:10px;padding:5px 7px 5px 5px;margin-bottom:7px}
+.tree-block-1{background:linear-gradient(135deg,#e8f8ef,#d4f0e0);border:1px solid #a8dfc0;border-radius:8px;padding:4px 6px 4px 4px;margin:2px 0}
+.tree-block-2{background:linear-gradient(135deg,#fff8e6,#ffefc8);border:1px solid #f0d080;border-radius:7px;padding:3px 5px 3px 3px;margin:2px 0}
+.tree-block-3{background:linear-gradient(135deg,#ffeef0,#ffdde0);border:1px solid #f0a8b0;border-radius:6px;padding:2px 4px 2px 3px;margin:1px 0}
+.tree-block-4{background:linear-gradient(135deg,#f0e8ff,#e4d4ff);border:1px solid #c8a8f0;border-radius:6px;padding:2px 4px 2px 3px;margin:1px 0}
+/* cycle: level 5 = back to blue like level 0 but slightly different shade */
+.tree-block-5{background:linear-gradient(135deg,#e4f0ff,#cce0ff);border:1px solid #90b8f0;border-radius:6px;padding:2px 4px 2px 3px;margin:1px 0}
+/* regulation: neutral greyer, clearly distinct from all levels */
+.tree-block-reg{background:#f4f4f4;border:1px solid #d8d8d8;border-radius:5px;padding:2px 5px 2px 4px;margin:1px 0}
 .node-children{margin-left:14px;margin-top:3px}
 .node-actions{display:none;gap:3px}
 .node-row:hover .node-actions{display:flex}
@@ -1207,7 +1212,8 @@ function renderNode(node, level){
     ?'<div style="margin:1px 0 3px 38px;font-size:11px;color:#ddd;font-style:italic">add a regulation to track in check-in</div>'
     :'';
 
-  var blockCls=reg?'tree-block-reg':level===0?'tree-block-0':level===1?'tree-block-1':'tree-block-2';
+  var levelColors=['tree-block-0','tree-block-1','tree-block-2','tree-block-3','tree-block-4'];
+  var blockCls=reg?'tree-block-reg':levelColors[level%5];
 
   var html='<div class="tree-node '+blockCls+'" id="tn-'+node.id+'">';
   html+='<div class="node-row">';
