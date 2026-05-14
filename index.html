@@ -27,6 +27,30 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 .status-bar{font-size:11px;color:#aaa;text-align:right;min-height:16px;margin-bottom:.5rem}
 .status-bar.err{color:#A32D2D}
 
+/* auth screen */
+.auth-screen{max-width:400px;margin:4rem auto;padding:1rem}
+.auth-logo{font-size:32px;text-align:center;margin-bottom:.5rem}
+.auth-title{font-size:22px;font-weight:600;text-align:center;margin-bottom:.25rem}
+.auth-sub{font-size:13px;color:#aaa;text-align:center;margin-bottom:2rem}
+.auth-card{background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:1.5rem}
+.auth-field{margin-bottom:1rem}
+.auth-field label{display:block;font-size:12px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.auth-field input{width:100%;font-size:15px;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-family:inherit;background:#fff;color:#111}
+.auth-field input:focus{outline:none;border-color:#888}
+.auth-btn{width:100%;padding:11px;border-radius:8px;border:none;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:.75rem}
+.auth-btn-primary{background:#111;color:#fff}
+.auth-btn-primary:hover{background:#333}
+.auth-btn-secondary{background:#fff;border:1px solid #ddd;color:#333}
+.auth-btn-secondary:hover{background:#f5f5f5}
+.auth-switch{font-size:13px;color:#aaa;text-align:center;margin-top:.75rem}
+.auth-switch a{color:#185FA5;cursor:pointer;text-decoration:none}
+.auth-switch a:hover{text-decoration:underline}
+.auth-err{font-size:13px;color:#A32D2D;background:#FCEBEB;padding:8px 12px;border-radius:7px;margin-bottom:.75rem;display:none}
+.auth-ok{font-size:13px;color:#0F6E56;background:#E1F5EE;padding:8px 12px;border-radius:7px;margin-bottom:.75rem;display:none}
+.user-menu{display:flex;align-items:center;gap:8px;font-size:13px;color:#aaa}
+.user-menu button{background:none;border:1px solid #eee;border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer;color:#666;font-family:inherit}
+.user-menu button:hover{background:#f5f5f5}
+
 /* tags */
 .tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:500;margin:0 2px;vertical-align:middle}
 .tag-hard{background:#FAECE7;color:#993C1D}
@@ -235,10 +259,45 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 </style>
 </head>
 <body>
-<div class="app">
+<!-- AUTH SCREEN -->
+<div id="auth-screen" style="display:none">
+  <div class="auth-screen">
+    <div class="auth-logo">&#127759;</div>
+    <div class="auth-title">Life Tracker</div>
+    <div class="auth-sub" id="auth-sub">Track your habits, tasks and life.</div>
+    <div class="auth-card">
+      <div class="auth-err" id="auth-err"></div>
+      <div class="auth-ok" id="auth-ok"></div>
+      <div class="auth-field">
+        <label>Email</label>
+        <input type="email" id="auth-email" placeholder="you@example.com" onkeydown="if(event.key==='Enter')authSubmit()"/>
+      </div>
+      <div class="auth-field" id="auth-pw-wrap">
+        <label>Password</label>
+        <input type="password" id="auth-pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')authSubmit()"/>
+      </div>
+      <div class="auth-field" id="auth-pw2-wrap" style="display:none">
+        <label>Confirm password</label>
+        <input type="password" id="auth-pw2" placeholder="••••••••" onkeydown="if(event.key==='Enter')authSubmit()"/>
+      </div>
+      <button class="auth-btn auth-btn-primary" id="auth-submit-btn" onclick="authSubmit()">Sign in</button>
+      <div class="auth-switch" id="auth-switch-text">
+        No account? <a onclick="setAuthMode('signup')">Create one</a> &nbsp;·&nbsp; <a onclick="setAuthMode('reset')">Forgot password?</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="main-app" style="display:none">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
     <div style="font-size:17px;font-weight:600">&#127759; Life Tracker</div>
-    <span class="status-bar" id="status-bar"></span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="status-bar" id="status-bar"></span>
+      <div class="user-menu">
+        <span id="user-email-display"></span>
+        <button onclick="signOut()">sign out</button>
+      </div>
+    </div>
   </div>
 
   <nav class="nav">
@@ -349,8 +408,8 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
       <p class="section-label">mastered ★ — hidden from check-in</p>
       <div id="stats-mastered-list"></div>
     </div>
-  </div>
-</div>
+  </div><!-- end tab-stats -->
+</div><!-- end main-app -->
 
 <!-- EDIT MODAL -->
 <div class="modal-backdrop" id="edit-modal" style="display:none" onclick="if(event.target===this)closeEditModal()">
@@ -574,16 +633,138 @@ var TODAY=new Date();TODAY.setHours(0,0,0,0);
 var tasks=[], nodes=[], logs=[], events=[];
 var calView='month', calOffset=0, listFilter='all', calMode='both';
 var masterStreak=parseInt(localStorage.getItem('masterStreak')||'21');
+var currentUser=null;
 
 // ── Status ────────────────────────────────────────────────────────
-function setStatus(m,e){var el=document.getElementById('status-bar');el.textContent=m;el.className='status-bar'+(e?' err':'');}
+function setStatus(m,e){var el=document.getElementById('status-bar');if(el){el.textContent=m;el.className='status-bar'+(e?' err':'');}}
+
+// ── Auth ──────────────────────────────────────────────────────────
+var AUTH_URL=SB_URL+'/auth/v1';
+function authHeaders(extra){return Object.assign({'apikey':SB_KEY,'Content-Type':'application/json'},extra||{});}
+
+async function getSession(){
+  var stored=localStorage.getItem('sb_session');
+  if(!stored)return null;
+  var s=JSON.parse(stored);
+  // check if expired
+  if(s.expires_at&&Date.now()/1000>s.expires_at-60){
+    // try refresh
+    var r=await fetch(AUTH_URL+'/token?grant_type=refresh_token',{method:'POST',headers:authHeaders(),body:JSON.stringify({refresh_token:s.refresh_token})});
+    if(!r.ok){localStorage.removeItem('sb_session');return null;}
+    var d=await r.json();
+    s=d;s.expires_at=Math.floor(Date.now()/1000)+d.expires_in;
+    localStorage.setItem('sb_session',JSON.stringify(s));
+  }
+  return s;
+}
+function sbHeaders(extra){
+  var h={'apikey':SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'};
+  if(currentUser&&currentUser.access_token)h['Authorization']='Bearer '+currentUser.access_token;
+  else h['Authorization']='Bearer '+SB_KEY;
+  return Object.assign(h,extra||{});
+}
+
+var authMode='login';
+function setAuthMode(m){
+  authMode=m;
+  document.getElementById('auth-err').style.display='none';
+  document.getElementById('auth-ok').style.display='none';
+  var btn=document.getElementById('auth-submit-btn');
+  var sw=document.getElementById('auth-switch-text');
+  var sub=document.getElementById('auth-sub');
+  var pw2=document.getElementById('auth-pw2-wrap');
+  var pwWrap=document.getElementById('auth-pw-wrap');
+  if(m==='login'){
+    btn.textContent='Sign in';sub.textContent='Welcome back.';pw2.style.display='none';pwWrap.style.display='';
+    sw.innerHTML='No account? <a onclick="setAuthMode(\'signup\')">Create one</a> &nbsp;·&nbsp; <a onclick="setAuthMode(\'reset\')">Forgot password?</a>';
+  } else if(m==='signup'){
+    btn.textContent='Create account';sub.textContent='Start tracking your life.';pw2.style.display='';pwWrap.style.display='';
+    sw.innerHTML='Already have one? <a onclick="setAuthMode(\'login\')">Sign in</a>';
+  } else {
+    btn.textContent='Send reset link';sub.textContent='We\'ll email you a reset link.';pw2.style.display='none';pwWrap.style.display='none';
+    sw.innerHTML='Back to <a onclick="setAuthMode(\'login\')">sign in</a>';
+  }
+}
+async function authSubmit(){
+  var email=document.getElementById('auth-email').value.trim();
+  var pw=document.getElementById('auth-pw').value;
+  var errEl=document.getElementById('auth-err');
+  var okEl=document.getElementById('auth-ok');
+  errEl.style.display='none';okEl.style.display='none';
+  if(!email){errEl.textContent='Email is required.';errEl.style.display='';return;}
+  document.getElementById('auth-submit-btn').textContent='…';
+
+  if(authMode==='reset'){
+    var r=await fetch(AUTH_URL+'/recover',{method:'POST',headers:authHeaders(),body:JSON.stringify({email:email})});
+    document.getElementById('auth-submit-btn').textContent='Send reset link';
+    if(r.ok){okEl.textContent='Reset link sent — check your email.';okEl.style.display='';}
+    else{errEl.textContent='Error sending reset link.';errEl.style.display='';}
+    return;
+  }
+  if(authMode==='signup'){
+    var pw2=document.getElementById('auth-pw2').value;
+    if(pw!==pw2){errEl.textContent='Passwords do not match.';errEl.style.display='';document.getElementById('auth-submit-btn').textContent='Create account';return;}
+    var r=await fetch(AUTH_URL+'/signup',{method:'POST',headers:authHeaders(),body:JSON.stringify({email:email,password:pw})});
+    var d=await r.json();
+    document.getElementById('auth-submit-btn').textContent='Create account';
+    if(!r.ok){errEl.textContent=d.msg||d.message||'Signup failed.';errEl.style.display='';return;}
+    if(d.access_token){
+      d.expires_at=Math.floor(Date.now()/1000)+d.expires_in;
+      localStorage.setItem('sb_session',JSON.stringify(d));
+      currentUser=d;
+      await onSignedIn(true);
+    } else {
+      okEl.textContent='Check your email to confirm your account, then sign in.';okEl.style.display='';
+      setAuthMode('login');
+    }
+    return;
+  }
+  // login
+  var r=await fetch(AUTH_URL+'/token?grant_type=password',{method:'POST',headers:authHeaders(),body:JSON.stringify({email:email,password:pw})});
+  var d=await r.json();
+  document.getElementById('auth-submit-btn').textContent='Sign in';
+  if(!r.ok){errEl.textContent=d.error_description||d.msg||'Invalid email or password.';errEl.style.display='';return;}
+  d.expires_at=Math.floor(Date.now()/1000)+d.expires_in;
+  localStorage.setItem('sb_session',JSON.stringify(d));
+  currentUser=d;
+  await onSignedIn(false);
+}
+async function onSignedIn(isNew){
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('main-app').style.display='';
+  var email=currentUser.user&&currentUser.user.email||'';
+  document.getElementById('user-email-display').textContent=email;
+  setStatus('loading…');
+  await Promise.all([loadTasks(),loadNodes(),loadLogs(),loadEvents()]);
+  setStatus('');
+  renderAll();
+  if(isNew) await createProfile();
+}
+async function createProfile(){
+  await fetch(SB_URL+'/rest/v1/profiles',{method:'POST',headers:sbHeaders(),body:JSON.stringify({id:currentUser.user.id,share_stats:false})});
+}
+async function signOut(){
+  await fetch(AUTH_URL+'/logout',{method:'POST',headers:Object.assign(authHeaders(),{'Authorization':'Bearer '+currentUser.access_token})});
+  localStorage.removeItem('sb_session');
+  currentUser=null;tasks=[];nodes=[];logs=[];events=[];
+  document.getElementById('main-app').style.display='none';
+  document.getElementById('auth-screen').style.display='';
+  setAuthMode('login');
+  document.getElementById('auth-email').value='';
+  document.getElementById('auth-pw').value='';
+}
 
 // ── Boot ──────────────────────────────────────────────────────────
 async function boot(){
-  setStatus('loading…');
-  await Promise.all([loadTasks(), loadNodes(), loadLogs(), loadEvents()]);
-  setStatus('');
-  renderAll();
+  var session=await getSession();
+  if(session){
+    currentUser=session;
+    await onSignedIn(false);
+  } else {
+    document.getElementById('auth-screen').style.display='';
+    document.getElementById('main-app').style.display='none';
+    setAuthMode('login');
+  }
 }
 
 // ── Tasks DB ──────────────────────────────────────────────────────
@@ -602,7 +783,7 @@ async function updateTask(t){
 async function deleteTaskDb(id){
   await fetch(api('tasks?id=eq.'+id),{method:'DELETE',headers:sbHeaders()});
 }
-function taskToDb(t){return{title:t.title,type:t.type,deadline:t.deadline?t.deadline.toISOString().split('T')[0]:null,repeat:t.repeat||null,done:t.done};}
+function taskToDb(t){return{title:t.title,type:t.type,deadline:t.deadline?t.deadline.toISOString().split('T')[0]:null,repeat:t.repeat||null,done:t.done,user_id:currentUser&&currentUser.user?currentUser.user.id:null};}
 function dbToTask(r){return{id:r.id,title:r.title,type:r.type,deadline:r.deadline?parseLocalDate(r.deadline):null,repeat:r.repeat||null,done:r.done};}
 
 // ── Nodes DB ──────────────────────────────────────────────────────
@@ -613,22 +794,23 @@ async function loadNodes(){
   if(!nodes.length) await seedDefaultNodes();
 }
 async function seedDefaultNodes(){
+  var uid=currentUser&&currentUser.user?currentUser.user.id:null;
   var tree=[
-    {label:'健康',children:[
-      {label:'衛生',children:[
-        {label:'洗澡'},{label:'刷牙'},{label:'刮鬍子'},{label:'洗臉'},
-        {label:'整潔',children:[{label:'房間'},{label:'碗筷'},{label:'衣服',children:[{label:'折衣服'},{label:'洗衣服'},{label:'衣服歸位'}]}]}
+    {label:'Health',children:[
+      {label:'Hygiene',children:[
+        {label:'Shower'},{label:'Brush teeth'},{label:'Skincare'},
+        {label:'Tidiness',children:[{label:'Room'},{label:'Dishes'},{label:'Laundry',children:[{label:'Fold clothes'},{label:'Wash clothes'},{label:'Put away clothes'}]}]}
       ]},
-      {label:'飲食',children:[{label:'吃飯時間'},{label:'吃飯品質'},{label:'喝水量'},{label:'垃圾食物量'}]},
-      {label:'作息',children:[{label:'睡眠',children:[{label:'起床時間'},{label:'睡覺時間'},{label:'睡眠時長'}]}]},
-      {label:'健身'}
+      {label:'Diet',children:[{label:'Meal timing'},{label:'Meal quality'},{label:'Water intake'},{label:'Junk food'}]},
+      {label:'Sleep',children:[{label:'Wake time'},{label:'Bed time'},{label:'Sleep duration'}]},
+      {label:'Exercise'}
     ]},
-    {label:'事業'},{label:'愛情'},{label:'友情'},{label:'家庭'}
+    {label:'Career'},{label:'Relationships'},{label:'Family'},{label:'Personal growth'}
   ];
   async function insert(items, parentId, order){
     for(var i=0;i<items.length;i++){
       var item=items[i];
-      var r=await fetch(api('checklist_nodes'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({label:item.label,parent_id:parentId||null,sort_order:i,node_type:'regular',hidden_from_checkin:false})});
+      var r=await fetch(api('checklist_nodes'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({label:item.label,parent_id:parentId||null,sort_order:i,node_type:'regular',hidden_from_checkin:false,user_id:uid})});
       var d=await r.json(); var row=Array.isArray(d)?d[0]:d;
       nodes.push(row);
       if(item.children) await insert(item.children, row.id, 0);
@@ -639,7 +821,7 @@ async function seedDefaultNodes(){
 async function addNode(label, parentId, order, nodeType){
   var type=nodeType||'regular';
   var sched=type==='regulation'?{type:'daily',times:1}:null;
-  var body={label:label,parent_id:parentId||null,sort_order:order||0,node_type:type,hidden_from_checkin:false};
+  var body={label:label,parent_id:parentId||null,sort_order:order||0,node_type:type,hidden_from_checkin:false,user_id:currentUser&&currentUser.user?currentUser.user.id:null};
   if(sched)body.schedule=sched;
   var r=await fetch(api('checklist_nodes'),{method:'POST',headers:sbHeaders(),body:JSON.stringify(body)});
   var d=await r.json(); var row=Array.isArray(d)?d[0]:d;
@@ -687,7 +869,7 @@ async function logNode(nodeId, status){
     await fetch(api('checklist_logs?id=eq.'+existing.id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({status:status})});
     existing.status=status;
   } else {
-    var r=await fetch(api('checklist_logs'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({node_id:nodeId,date:dateStr,status:status})});
+    var r=await fetch(api('checklist_logs'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({node_id:nodeId,date:dateStr,status:status,user_id:currentUser&&currentUser.user?currentUser.user.id:null})});
     var d=await r.json(); var row=Array.isArray(d)?d[0]:d; logs.push(row);
   }
   // auto-hide only if done streak hit threshold (not on fail)
@@ -1323,7 +1505,8 @@ function eventToDb(e){
     location:e.location||null,notes:e.notes||null,color:e.color||'blue',
     repeat:e.repeat?JSON.stringify(e.repeat):null,
     repeat_end_date:e.repeat_end_date?e.repeat_end_date.toISOString().split('T')[0]:null,
-    repeat_end_count:e.repeat_end_count||null
+    repeat_end_count:e.repeat_end_count||null,
+    user_id:currentUser&&currentUser.user?currentUser.user.id:null
   };
 }
 function parseRepeat(v){
