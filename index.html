@@ -86,6 +86,8 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 .ci-yes:hover{background:#9FE1CB}
 .ci-fail{background:#FCEBEB;color:#A32D2D;border-color:#F7C1C1}
 .ci-fail:hover{background:#F7C1C1}
+.ci-notyet{background:#FAEEDA;color:#854F0B;border-color:#F5D899}
+.ci-notyet:hover{background:#F5D899}
 .ci-skip{background:#f5f5f5;color:#888}
 .ci-skip:hover{background:#eee}
 .checkin-done{font-size:15px;color:#0F6E56;padding:1rem 0}
@@ -1039,7 +1041,6 @@ async function logNode(nodeId, status){
   var dateStr=TODAY.toISOString().split('T')[0];
   var n=nodes.find(function(x){return x.id===nodeId;});
   var times=n?regTimes(n):1;
-  var todayDoneCount=logs.filter(function(l){return l.node_id===nodeId&&l.date===dateStr&&l.status==='done';}).length;
   var existing=times===1?logs.find(function(l){return l.node_id===nodeId&&l.date===dateStr;}):null;
   if(existing){
     await fetch(api('checklist_logs?id=eq.'+existing.id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({status:status})});
@@ -1048,10 +1049,18 @@ async function logNode(nodeId, status){
     var r=await fetch(api('checklist_logs'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({node_id:nodeId,date:dateStr,status:status,user_id:currentUser&&currentUser.user?currentUser.user.id:null})});
     var d=await r.json(); var row=Array.isArray(d)?d[0]:d; logs.push(row);
   }
-  // auto-hide only if done streak hit threshold (not on fail)
-  if(status==='done'){
+  // on done: update last_done_date so every_n_days resets from today
+  if(status==='done'&&n){
+    await fetch(api('checklist_nodes?id=eq.'+nodeId),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({last_done_date:dateStr})});
+    n.last_done_date=dateStr;
+    // also ensure started=true
+    if(n.started===false){
+      await fetch(api('checklist_nodes?id=eq.'+nodeId),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({started:true})});
+      n.started=true;
+    }
+    // auto-master check
     var streak=consecutiveStreak(nodeId);
-    if(n&&!n.hidden_from_checkin&&streak>=masterStreak){
+    if(!n.hidden_from_checkin&&streak>=masterStreak){
       await setNodeHidden(nodeId,true); return;
     }
   }
@@ -1154,12 +1163,14 @@ function renderNode(node, level){
   var leaf=isLeaf(node.id);
   var bareleaf=!reg&&leaf;
   var paused=reg&&node.hidden_from_checkin;
+  var soft=reg&&isSoft(node);
+  var notStarted=reg&&isNotStarted(node);
   var menuOpen=openMenuId===node.id;
 
   // ── checkbox: regulations only ──
   var log=reg?todayLog(node.id):null;
-  var checkCls=log?(log.status==='done'?'done':(log.status==='fail'?'fail':'skip')):'';
-  var checkIcon=log?(log.status==='done'?'&#10003;':(log.status==='fail'?'&#10007;':'&#8212;')):'';
+  var checkCls=log?(log.status==='done'?'done':(log.status==='fail'?'fail':(log.status==='notyet'?'skip':'skip'))):'';
+  var checkIcon=log?(log.status==='done'?'&#10003;':(log.status==='fail'?'&#10007;':(log.status==='notyet'?'&#8764;':'&#8212;'))):'';
   var checkBox=reg
     ?'<div class="node-check '+checkCls+'" onclick="cycleLog(\''+node.id+'\')" title="cycle: done / failed / clear">'+checkIcon+'</div>'
     :'<div style="width:17px;flex-shrink:0"></div>';
@@ -1173,12 +1184,15 @@ function renderNode(node, level){
   var streak=reg?consecutiveStreak(node.id):0;
   var streakBadge='';
   if(reg&&paused) streakBadge='<span class="reg-status paused" onclick="setNodeHidden(\''+node.id+'\',false)" title="click to unpause">paused</span>';
+  else if(reg&&notStarted) streakBadge='<span class="reg-status" style="background:#FAEEDA;color:#854F0B;cursor:default">not started</span>';
   else if(reg) streakBadge='<span class="reg-status active" onclick="setNodeHidden(\''+node.id+'\',true)" title="click to pause">active</span>';
-  if(reg&&streak>1) streakBadge+='<span style="font-size:10px;color:'+(paused?'#ccc':'#5DCAA5')+';margin-left:3px">'+streak+'d</span>';
+  if(reg&&soft&&!paused) streakBadge+='<span style="font-size:10px;background:#E1F5EE;color:#0F6E56;padding:1px 5px;border-radius:4px;margin-left:2px">soft</span>';
+  if(reg&&streak>1&&!notStarted) streakBadge+='<span style="font-size:10px;color:'+(paused?'#ccc':'#5DCAA5')+';margin-left:3px">'+streak+'d</span>';
 
   // ── label style ──
   var labelStyle='';
   if(reg&&paused) labelStyle='color:#ccc;';
+  else if(reg&&notStarted) labelStyle='font-style:italic;color:#bbb;';
   else if(reg) labelStyle='font-style:italic;color:#666;';
 
   // ── schedule inline ──
@@ -1191,11 +1205,14 @@ function renderNode(node, level){
   // ── options menu ──
   var menuHtml='';
   if(reg){
-    // regulation ⋯ menu: schedule, rename, delete
+    var softToggleLabel=soft?'&#128274; set strict':'&#129490; set soft';
+    var startedToggleLabel=notStarted?'&#9654; mark as started':'&#9646; set not started yet';
     menuHtml='<div class="node-opts-wrap">'
       +'<button class="opts-btn" onclick="toggleMenu(\''+node.id+'\',event)">&#8943;</button>'
       +'<div class="node-opts-menu'+(menuOpen?' open':'')+'" id="menu-'+node.id+'">'
       +'<button onclick="openSchedModal(\''+node.id+'\');closeMenu()">&#128197; schedule</button>'
+      +'<button onclick="toggleStrictness(\''+node.id+'\');closeMenu()">'+softToggleLabel+'</button>'
+      +'<button onclick="toggleStarted(\''+node.id+'\');closeMenu()">'+startedToggleLabel+'</button>'
       +'<button onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\');closeMenu()">&#9998; rename</button>'
       +'<div class="menu-sep"></div>'
       +'<button onclick="promptDelete(\''+node.id+'\');closeMenu()" style="color:#c0392b">&#128465; delete</button>'
@@ -1273,6 +1290,18 @@ async function unpauseAllRegs(nodeId){
   var regs=hiddenRegsUnder(nodeId);
   for(var i=0;i<regs.length;i++) await setNodeHidden(regs[i].id,false);
 }
+async function toggleStrictness(id){
+  var n=nodes.find(function(x){return x.id===id;});if(!n)return;
+  var newVal=isSoft(n)?'strict':'soft';
+  await fetch(api('checklist_nodes?id=eq.'+id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({strictness:newVal})});
+  n.strictness=newVal;renderAll();
+}
+async function toggleStarted(id){
+  var n=nodes.find(function(x){return x.id===id;});if(!n)return;
+  var newVal=isNotStarted(n)?true:false;
+  await fetch(api('checklist_nodes?id=eq.'+id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({started:newVal})});
+  n.started=newVal;renderAll();
+}
 
 // ── Settings ──────────────────────────────────────────────────────
 function toggleSettings(){
@@ -1309,15 +1338,39 @@ function regDueToday(node){
   var s=nodeSchedule(node);
   var dow=TODAY.getDay();
   var dom=TODAY.getDate();
+  // not started yet — never show in check-in
+  if(node.started===false) return false;
+  // if overdue (soft or any — failed/not-yet means show every day until done)
+  if(isOverdue(node)) return true;
   if(s.type==='daily'||s.type==='times_per_day') return true;
   if(s.type==='every_n_days'){
-    var epoch=Math.floor(TODAY.getTime()/86400000);
-    return epoch%s.n===0;
+    // use last_done_date as anchor if available, else creation date
+    var anchor=node.last_done_date?parseLocalDate(node.last_done_date):parseLocalDate(node.created_at?node.created_at.split('T')[0]:TODAY.toISOString().split('T')[0]);
+    var diff=Math.round((TODAY-anchor)/86400000);
+    return diff>0&&diff%s.n===0;
   }
   if(s.type==='weekday') return (s.days||[]).indexOf(dow)>=0;
   if(s.type==='month_day') return dom===s.mday;
   return true;
 }
+function isOverdue(node){
+  // overdue = was due on a previous day but not yet done/started
+  var s=nodeSchedule(node);
+  if(s.type==='daily'||s.type==='times_per_day') return false; // daily never "overdue" in this sense
+  var dateStr=TODAY.toISOString().split('T')[0];
+  // check if there's a 'notyet' or 'fail' log today or any pending from before
+  var lastLog=getLastLog(node.id);
+  if(!lastLog) return false;
+  // if last log was notyet or fail and not today's done — show again
+  if((lastLog.status==='notyet'||lastLog.status==='fail')&&lastLog.date!==dateStr) return true;
+  return false;
+}
+function getLastLog(nodeId){
+  var sorted=logs.filter(function(l){return l.node_id===nodeId;}).sort(function(a,b){return b.date.localeCompare(a.date);});
+  return sorted[0]||null;
+}
+function isSoft(node){ return node.strictness==='soft'; }
+function isNotStarted(node){ return node.started===false; }
 function regTimes(node){
   var s=nodeSchedule(node);
   if(s.type==='times_per_day') return Math.max(2,s.times||2);
@@ -1415,10 +1468,8 @@ function restartCheckin(){
 }
 function renderCheckin(){
   var wrap=document.getElementById('checkin-wrap');
-  // Done when main queue exhausted; then process skipped
   if(checkinIdx>=checkinQueue.length){
     if(checkinSkipped.length){
-      // move skipped back into queue
       checkinQueue=checkinSkipped.slice();
       checkinSkipped=[];
       checkinIdx=0;
@@ -1428,7 +1479,7 @@ function renderCheckin(){
     wrap.innerHTML='<div class="checkin-card">'
       +'<div class="checkin-done">&#127881; All done for today!</div>'
       +'<div style="display:flex;gap:8px;justify-content:center;margin-top:.75rem">'
-      +'<button class="na-btn" style="padding:6px 14px" onclick="document.getElementById(\'checkin-wrap\').style.display=\'none\'">close</button>'
+      +'<button class="na-btn" style="padding:6px 14px" onclick="exitCheckin()">close</button>'
       +'<button class="na-btn" style="padding:6px 14px" onclick="restartCheckin()">&#8635; re-check in</button>'
       +'</div></div>';
     return;
@@ -1441,18 +1492,42 @@ function renderCheckin(){
   var streak=consecutiveStreak(node.id);
   var slotLabel=entry.total>1?' <span style="font-size:12px;color:#aaa">#'+entry.slot+' of '+entry.total+'</span>':'';
   var schedLbl=scheduleLabel(node);
+  var soft=isSoft(node);
+  var notStarted=isNotStarted(node);
+  var softBadge=soft?'<span style="font-size:10px;background:#E1F5EE;color:#0F6E56;padding:1px 6px;border-radius:4px;margin-left:4px">soft</span>':'';
+
+  // buttons depend on state
+  var btns='';
+  if(notStarted){
+    // not started yet — show start button and skip
+    btns='<button class="ci-btn ci-yes" onclick="startRegulation(\''+node.id+'\')">&#9654; Start tracking</button>'
+      +'<button class="ci-btn ci-skip" onclick="checkinSkip()">Later</button>';
+  } else {
+    btns='<button class="ci-btn ci-yes" onclick="checkinAnswer(\'done\')">&#10003; Done</button>'
+      +'<button class="ci-btn ci-fail" onclick="checkinAnswer(\'fail\')">&#10007; Failed</button>';
+    if(soft){
+      btns+='<button class="ci-btn ci-notyet" onclick="checkinAnswer(\'notyet\')">Not yet</button>';
+    }
+    btns+='<button class="ci-btn ci-skip" onclick="checkinSkip()">Later</button>';
+  }
+
   wrap.innerHTML='<div class="checkin-card">'
-    +'<div class="checkin-prog">'+done+' / '+total+(checkinSkipped.length?' · '+checkinSkipped.length+' skipped':'')+'</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
+    +'<div class="checkin-prog">'+done+' / '+total+(checkinSkipped.length?' · '+checkinSkipped.length+' later':'')+'</div>'
+    +'<button class="na-btn" style="font-size:11px;padding:2px 8px" onclick="exitCheckin()">&#10005; exit</button>'
+    +'</div>'
     +'<div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div>'
     +'<div class="checkin-path">'+escHtml(ancestorLabels(node.id))
       +' <span style="color:#ccc">·</span> <span style="color:#aaa;font-size:10px">'+escHtml(schedLbl)+'</span>'
+      +softBadge
       +(streak>0?' <span style="color:#5DCAA5;font-size:10px">· '+streak+'d</span>':'')+'</div>'
     +'<div class="checkin-q">'+escHtml(node.label)+slotLabel+'</div>'
-    +'<div class="checkin-btns">'
-    +'<button class="ci-btn ci-yes" onclick="checkinAnswer(\'done\')">&#10003; Done</button>'
-    +'<button class="ci-btn ci-fail" onclick="checkinAnswer(\'fail\')">&#10007; Failed</button>'
-    +'<button class="ci-btn ci-skip" onclick="checkinSkip()">Later</button>'
-    +'</div></div>';
+    +'<div class="checkin-btns">'+btns+'</div>'
+    +'</div>';
+}
+function exitCheckin(){
+  document.getElementById('checkin-wrap').style.display='none';
+  checkinQueue=[];checkinSkipped=[];checkinIdx=0;
 }
 async function checkinAnswer(status){
   var entry=checkinQueue[checkinIdx];
@@ -1461,11 +1536,19 @@ async function checkinAnswer(status){
   renderCheckin();
 }
 function checkinSkip(){
-  // move current entry to skipped pile, advance
   checkinSkipped.push(checkinQueue[checkinIdx]);
   checkinQueue.splice(checkinIdx,1);
-  // don't increment idx since we removed the current item
   renderCheckin();
+}
+async function startRegulation(nodeId){
+  // mark as started
+  await fetch(api('checklist_nodes?id=eq.'+nodeId),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({started:true})});
+  var n=nodes.find(function(x){return x.id===nodeId;});
+  if(n)n.started=true;
+  // advance in queue
+  checkinIdx++;
+  renderCheckin();
+  renderTree();
 }
 
 // ── NLP ───────────────────────────────────────────────────────────
