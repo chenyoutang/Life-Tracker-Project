@@ -459,8 +459,17 @@ async function addNode(label, parentId, order, nodeType){
   nodes.push(row); renderAll();
 }
 async function updateNodeSchedule(id, sched){
-  await fetch(api('checklist_nodes?id=eq.'+id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({schedule:sched})});
-  var n=nodes.find(function(x){return x.id===id;}); if(n) n.schedule=sched; renderAll();
+  // Supabase REST needs JSONB sent as a JSON string value inside the body object
+  var body={schedule:sched};
+  var r=await fetch(api('checklist_nodes?id=eq.'+id),{
+    method:'PATCH',
+    headers:sbHeaders(),
+    body:JSON.stringify(body)
+  });
+  if(!r.ok){var err=await r.text();setStatus('schedule save error: '+err,true);return;}
+  var n=nodes.find(function(x){return x.id===id;});
+  if(n) n.schedule=sched;
+  renderAll();
 }
 async function deleteNode(id){
   await fetch(api('checklist_nodes?id=eq.'+id),{method:'DELETE',headers:sbHeaders()});
@@ -733,28 +742,30 @@ function saveSettings(){
 
 // ── Schedule helpers ──────────────────────────────────────────────
 function nodeSchedule(node){
-  // safe parse — returns object with defaults
   var s=node.schedule;
-  if(!s||typeof s!=='object') return {type:'daily',times:1};
+  if(!s) return {type:'daily',times:1};
+  if(typeof s==='string'){try{s=JSON.parse(s);}catch(e){return {type:'daily',times:1};}}
+  if(typeof s!=='object') return {type:'daily',times:1};
   return {type:s.type||'daily', times:s.times||1, n:s.n||2, days:s.days||[], mday:s.mday||1};
 }
 function scheduleLabel(node){
   var s=nodeSchedule(node);
-  if(s.type==='daily') return s.times>1?s.times+'x / day':'daily';
   if(s.type==='times_per_day') return s.times+'x / day';
+  if(s.type==='daily') return 'daily';
   if(s.type==='every_n_days') return 'every '+s.n+' days';
-  if(s.type==='weekday'){var dn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];return (s.days||[]).map(function(d){return dn[d];}).join(', ')||'weekday';}
+  if(s.type==='weekday'){
+    var dn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    return (s.days||[]).map(function(d){return dn[d];}).join(', ')||'weekday';
+  }
   if(s.type==='month_day') return 'day '+s.mday+' of month';
   return 'daily';
 }
 function regDueToday(node){
-  // Is this regulation scheduled to appear today?
   var s=nodeSchedule(node);
-  var dow=TODAY.getDay(); // 0=Sun
+  var dow=TODAY.getDay();
   var dom=TODAY.getDate();
   if(s.type==='daily'||s.type==='times_per_day') return true;
   if(s.type==='every_n_days'){
-    // Use epoch days from a fixed anchor; due if diff % n === 0
     var epoch=Math.floor(TODAY.getTime()/86400000);
     return epoch%s.n===0;
   }
@@ -762,13 +773,11 @@ function regDueToday(node){
   if(s.type==='month_day') return dom===s.mday;
   return true;
 }
-// How many times does this reg appear in today's queue?
 function regTimes(node){
   var s=nodeSchedule(node);
-  if(s.type==='times_per_day'||(s.type==='daily'&&s.times>1)) return s.times||2;
+  if(s.type==='times_per_day') return Math.max(2,s.times||2);
   return 1;
 }
-// How many times has this node been logged 'done' today?
 function doneTodayCount(nodeId){
   var dateStr=TODAY.toISOString().split('T')[0];
   return logs.filter(function(l){return l.node_id===nodeId&&l.date===dateStr&&l.status==='done';}).length;
@@ -781,11 +790,11 @@ function openSchedModal(id){
   var n=nodes.find(function(x){return x.id===id;});
   if(!n)return;
   var s=nodeSchedule(n);
-  document.getElementById('sched-type').value=s.type==='daily'&&s.times>1?'times_per_day':s.type;
+  // map stored type to select value
+  document.getElementById('sched-type').value=s.type;
   document.getElementById('sched-times').value=s.times||2;
   document.getElementById('sched-n').value=s.n||2;
   document.getElementById('sched-mday').value=s.mday||1;
-  // weekday buttons
   document.querySelectorAll('.wd-btn').forEach(function(b){
     b.classList.toggle('on',(s.days||[]).indexOf(parseInt(b.dataset.d))>=0);
     b.onclick=function(){this.classList.toggle('on');};
@@ -805,12 +814,19 @@ async function saveSchedule(){
   if(!schedNodeId)return;
   var t=document.getElementById('sched-type').value;
   var sched={type:t,times:1};
-  if(t==='times_per_day'){sched.type='daily';sched.times=parseInt(document.getElementById('sched-times').value)||2;}
-  else if(t==='every_n_days'){sched.n=parseInt(document.getElementById('sched-n').value)||2;}
-  else if(t==='weekday'){sched.days=[];document.querySelectorAll('.wd-btn.on').forEach(function(b){sched.days.push(parseInt(b.dataset.d));});}
-  else if(t==='month_day'){sched.mday=parseInt(document.getElementById('sched-mday').value)||1;}
+  if(t==='times_per_day'){
+    sched.times=parseInt(document.getElementById('sched-times').value)||2;
+  } else if(t==='every_n_days'){
+    sched.n=parseInt(document.getElementById('sched-n').value)||2;
+  } else if(t==='weekday'){
+    sched.days=[];
+    document.querySelectorAll('.wd-btn.on').forEach(function(b){sched.days.push(parseInt(b.dataset.d));});
+  } else if(t==='month_day'){
+    sched.mday=parseInt(document.getElementById('sched-mday').value)||1;
+  }
+  var id=schedNodeId;
   closeSchedModal();
-  await updateNodeSchedule(schedNodeId,sched);
+  await updateNodeSchedule(id,sched);
 }
 
 // ── Check-in ──────────────────────────────────────────────────────
