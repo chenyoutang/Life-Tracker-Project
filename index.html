@@ -184,10 +184,6 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
     </div>
     <div id="checkin-wrap" style="display:none"></div>
     <div id="tree-wrap"></div>
-    <div id="mastered-section" style="display:none;margin-top:1rem">
-      <p class="section-label">mastered (hidden from check-in)</p>
-      <div id="mastered-list"></div>
-    </div>
     <span class="settings-toggle" onclick="toggleSettings()">&#9881; settings</span>
     <div class="settings-panel" id="settings-panel" style="display:none">
       <p class="section-label">check-in settings</p>
@@ -261,6 +257,10 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
         <div class="todo-stat"><div class="stat-num" id="st-todo-over">—</div><div class="stat-label">overdue</div></div>
         <div class="todo-stat"><div class="stat-num" id="st-todo-done">—</div><div class="stat-label">done</div></div>
       </div>
+    </div>
+    <div class="card" id="stats-mastered-section" style="display:none">
+      <p class="section-label">mastered ★ — hidden from check-in</p>
+      <div id="stats-mastered-list"></div>
     </div>
   </div>
 </div>
@@ -453,28 +453,54 @@ function isMastered(nodeId){
 function childrenOf(parentId){
   return nodes.filter(function(n){return n.parent_id===parentId;}).sort(function(a,b){return a.sort_order-b.sort_order;});
 }
+function isRegulation(node){
+  return node.node_type==='regulation';
+}
 function isLeaf(nodeId){
   return childrenOf(nodeId).length===0;
 }
-function isRegulation(nodeId){
-  var n=nodes.find(function(x){return x.id===nodeId;});
-  return n&&n.node_type==='regulation';
+// Regulations under a subtree (all depths)
+function regulationsUnder(nodeId){
+  var result=[];
+  function walk(id){
+    childrenOf(id).forEach(function(c){
+      if(isRegulation(c)) result.push(c);
+      else walk(c.id);
+    });
+  }
+  walk(nodeId);
+  return result;
 }
-function checkableLeaves(){
-  // only actual leaves (no children) that are not hidden
-  return nodes.filter(function(n){return isLeaf(n.id)&&!n.hidden_from_checkin;});
+// Only regulations that are visible (not hidden) under a subtree
+function visibleRegsUnder(nodeId){
+  return regulationsUnder(nodeId).filter(function(n){return !n.hidden_from_checkin;});
 }
-function allLeaves(){
-  return nodes.filter(function(n){return isLeaf(n.id);});
+function hiddenRegsUnder(nodeId){
+  return regulationsUnder(nodeId).filter(function(n){return n.hidden_from_checkin;});
 }
-function masteredLeaves(){
-  return nodes.filter(function(n){return isLeaf(n.id)&&n.hidden_from_checkin;});
+// Regulations used in daily check-in = not hidden
+function checkableRegs(){
+  return nodes.filter(function(n){return isRegulation(n)&&!n.hidden_from_checkin;});
+}
+function allRegs(){
+  return nodes.filter(function(n){return isRegulation(n);});
+}
+function masteredRegs(){
+  return nodes.filter(function(n){return isRegulation(n)&&n.hidden_from_checkin;});
 }
 function ancestorLabels(nodeId){
   var labels=[];
   var n=nodes.find(function(x){return x.id===nodeId;});
   while(n&&n.parent_id){n=nodes.find(function(x){return x.id===n.parent_id;});if(n)labels.unshift(n.label);}
   return labels.join(' › ');
+}
+// Does a node have any regulation descendants?
+function hasRegDescendants(nodeId){
+  return regulationsUnder(nodeId).length>0;
+}
+// Does a non-regulation leaf node have no regulations at all?
+function isBareLead(node){
+  return !isRegulation(node)&&isLeaf(node.id);
 }
 
 // ── Render tree ───────────────────────────────────────────────────
@@ -483,94 +509,120 @@ function renderTree(){
   var wrap=document.getElementById('tree-wrap');
   var roots=childrenOf(null);
   wrap.innerHTML=roots.map(function(n){return renderNode(n,0);}).join('');
-  // mastered section
-  var mastered=masteredLeaves();
-  var ms=document.getElementById('mastered-section');
-  var ml=document.getElementById('mastered-list');
-  if(mastered.length){
-    ms.style.display='';
-    ml.innerHTML=mastered.map(function(n){
-      var streak=consecutiveStreak(n.id);
-      return'<div style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;background:#f9f9f9;margin-bottom:4px">'
-        +'<span style="font-size:13px;color:#5DCAA5">★</span>'
-        +'<span style="flex:1;font-size:13px;color:#888">'+escHtml(ancestorLabels(n.id)?ancestorLabels(n.id)+' › '+n.label:n.label)+'</span>'
-        +'<span style="font-size:11px;color:#aaa">'+streak+'d streak</span>'
-        +'<button class="na-btn" onclick="setNodeHidden(\''+n.id+'\',false)" title="bring back to check-in">↩ restore</button>'
-        +'</div>';
-    }).join('');
-  } else ms.style.display='none';
 }
+
 function renderNode(node, level){
   var children=childrenOf(node.id);
   var hasChildren=children.length>0;
   var isExp=expanded[node.id]!==false;
+  var reg=isRegulation(node);
   var leaf=isLeaf(node.id);
-  var regulation=isRegulation(node.id);
-  var log=leaf?todayLog(node.id):null;
+  var bareleaf=isBareLead(node); // non-reg leaf with no children
+
+  // ── checkbox: only regulations get one ──
+  var log=reg?todayLog(node.id):null;
   var checkCls=log?(log.status==='done'?'done':'skip'):'';
   var checkIcon=log?(log.status==='done'?'&#10003;':'&#8212;'):'';
-  var toggle=hasChildren
-    ?('<span class="node-toggle" onclick="toggleNode(\''+node.id+'\')" style="cursor:pointer">'+(isExp?'&#9660;':'&#9654;')+'</span>')
-    :'<span class="node-toggle"></span>';
-
-  // checkbox only for leaves
-  var checkBox=leaf
+  var checkBox=reg
     ?'<div class="node-check '+checkCls+'" onclick="cycleLog(\''+node.id+'\')" title="done / skip / clear">'+checkIcon+'</div>'
     :'<div style="width:17px;flex-shrink:0"></div>';
 
-  // actions differ by node type
-  var actions='';
-  if(regulation){
-    // regulation: rename and delete only
-    actions='<button class="na-btn" onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\')">rename</button>'
-      +'<button class="na-btn" onclick="promptDelete(\''+node.id+'\')">del</button>';
-  } else if(leaf){
-    // leaf (not regulation): +regulation, hide, rename, delete
-    actions='<button class="na-btn" onclick="promptAddRegulation(\''+node.id+'\')">+regulation</button>'
-      +'<button class="na-btn" onclick="promptHide(\''+node.id+'\')" title="hide from daily check-in">hide</button>'
-      +'<button class="na-btn" onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\')">rename</button>'
-      +'<button class="na-btn" onclick="promptDelete(\''+node.id+'\')">del</button>';
-  } else {
-    // parent node: +child, rename, delete
-    actions='<button class="na-btn" onclick="promptAddChild(\''+node.id+'\')">+child</button>'
-      +'<button class="na-btn" onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\')">rename</button>'
-      +'<button class="na-btn" onclick="promptDelete(\''+node.id+'\')">del</button>';
+  // ── toggle arrow ──
+  var toggle=hasChildren
+    ?'<span class="node-toggle" onclick="toggleNode(\''+node.id+'\')" style="cursor:pointer">'+(isExp?'&#9660;':'&#9654;')+'</span>'
+    :'<span class="node-toggle"></span>';
+
+  // ── streak badge (regulations only) ──
+  var streak=reg?consecutiveStreak(node.id):0;
+  var mastered=reg&&node.hidden_from_checkin;
+  var streakBadge='';
+  if(reg&&mastered) streakBadge='<span style="font-size:10px;color:#aaa;margin-left:4px">'+streak+'d ·  hidden</span>';
+  else if(reg&&streak>1) streakBadge='<span style="font-size:10px;color:#5DCAA5;margin-left:4px">'+streak+'d</span>';
+
+  // ── label style ──
+  var labelStyle='';
+  if(reg&&mastered) labelStyle='color:#ccc;';
+  else if(reg) labelStyle='font-style:italic;color:#666;';
+
+  // ── hide/show all for parent nodes ──
+  var bulkBtns='';
+  if(!reg){
+    var visRegs=visibleRegsUnder(node.id);
+    var hidRegs=hiddenRegsUnder(node.id);
+    if(visRegs.length>0) bulkBtns+='<button class="na-btn" onclick="hideAllRegs(\''+node.id+'\',event)">hide all</button>';
+    if(hidRegs.length>0) bulkBtns+='<button class="na-btn" onclick="showAllRegs(\''+node.id+'\',event)">show all</button>';
   }
 
-  var streak=leaf?consecutiveStreak(node.id):0;
-  var streakBadge=leaf&&streak>0?'<span style="font-size:10px;color:#aaa;margin-left:4px">'+streak+'d</span>':'';
+  // ── per-node actions ──
+  var actions='';
+  if(reg){
+    // regulation: hide/show + rename + delete
+    if(!node.hidden_from_checkin)
+      actions+='<button class="na-btn" onclick="setNodeHidden(\''+node.id+'\',true)">hide</button>';
+    else
+      actions+='<button class="na-btn" onclick="setNodeHidden(\''+node.id+'\',false)">show</button>';
+    actions+='<button class="na-btn" onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\')">rename</button>';
+    actions+='<button class="na-btn" onclick="promptDelete(\''+node.id+'\')">del</button>';
+  } else {
+    // any non-regulation node: +child, +regulation, rename, delete
+    actions+='<button class="na-btn" onclick="promptAddChild(\''+node.id+'\')">+child</button>';
+    actions+='<button class="na-btn" onclick="promptAddRegulation(\''+node.id+'\')">+regulation</button>';
+    actions+=bulkBtns;
+    actions+='<button class="na-btn" onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\')">rename</button>';
+    actions+='<button class="na-btn" onclick="promptDelete(\''+node.id+'\')">del</button>';
+  }
 
-  var html='<div class="tree-node" id="tn-'+node.id+'">'
-    +'<div class="node-row">'
-    +toggle
-    +checkBox
-    +'<span class="node-label l'+Math.min(level,2)+'"'+(regulation?' style="font-style:italic;color:#888"':'')+'>'+escHtml(node.label)+'</span>'
-    +streakBadge
-    +'<span class="node-actions">'+actions+'</span>'
-    +'</div>';
+  // ── bare leaf hint ──
+  var hint=bareleaf
+    ?'<div style="margin:2px 0 4px 38px;font-size:11px;color:#ccc;font-style:italic">no regulations yet — add one to track this in check-in</div>'
+    :'';
+
+  var html='<div class="tree-node" id="tn-'+node.id+'">';
+  html+='<div class="node-row">';
+  html+=toggle;
+  html+=checkBox;
+  html+='<span class="node-label l'+Math.min(level,2)+'" style="'+labelStyle+'">'+escHtml(node.label)+'</span>';
+  html+=streakBadge;
+  html+='<span class="node-actions">'+actions+'</span>';
+  html+='</div>';
+  html+=hint;
   if(hasChildren&&isExp){
     html+='<div class="node-children">'+children.map(function(c){return renderNode(c,level+1);}).join('')+'</div>';
   }
   html+='</div>';
   return html;
 }
+
 function toggleNode(id){expanded[id]=expanded[id]===false?true:false;renderTree();}
+
 function cycleLog(nodeId){
-  if(!isLeaf(nodeId))return; // safety: only leaf nodes
+  var n=nodes.find(function(x){return x.id===nodeId;});
+  if(!n||!isRegulation(n))return;
   var log=todayLog(nodeId);
   if(!log) logNode(nodeId,'done');
   else if(log.status==='done') logNode(nodeId,'skip');
-  else {
+  else{
     fetch(api('checklist_logs?id=eq.'+log.id),{method:'DELETE',headers:sbHeaders()});
     logs=logs.filter(function(l){return l.id!==log.id;}); renderAll();
   }
 }
+
 function promptAddChild(parentId){var l=prompt('New item name:');if(l)addNode(l,parentId,999,'regular');}
 function promptAddRegulation(parentId){var l=prompt('Regulation name (e.g. "morning", "before bed"):');if(l)addNode(l,parentId,999,'regulation');}
 function addRootNode(){var l=prompt('New area name:');if(l)addNode(l,null,999,'regular');}
 function promptRename(id,cur){var l=prompt('Rename:',cur);if(l)renameNode(id,l);}
 function promptDelete(id){if(confirm('Delete this item and all its children?'))deleteNode(id);}
-function promptHide(id){if(confirm('Hide from daily check-in? You can restore it from the mastered section below.'))setNodeHidden(id,true);}
+
+async function hideAllRegs(nodeId,e){
+  e&&e.stopPropagation();
+  var regs=visibleRegsUnder(nodeId);
+  for(var i=0;i<regs.length;i++) await setNodeHidden(regs[i].id,true);
+}
+async function showAllRegs(nodeId,e){
+  e&&e.stopPropagation();
+  var regs=hiddenRegsUnder(nodeId);
+  for(var i=0;i<regs.length;i++) await setNodeHidden(regs[i].id,false);
+}
 
 // ── Settings ──────────────────────────────────────────────────────
 function toggleSettings(){
@@ -585,11 +637,10 @@ function saveSettings(){
 
 // ── Check-in ──────────────────────────────────────────────────────
 function startCheckin(){
-  var leaves=checkableLeaves();
+  var regs=checkableRegs();
   var dateStr=TODAY.toISOString().split('T')[0];
-  checkinQueue=leaves.filter(function(n){
-    var l=logs.find(function(x){return x.node_id===n.id&&x.date===dateStr;});
-    return !l;
+  checkinQueue=regs.filter(function(n){
+    return !logs.find(function(x){return x.node_id===n.id&&x.date===dateStr;});
   });
   checkinIdx=0;
   document.getElementById('checkin-wrap').style.display='';
@@ -598,7 +649,8 @@ function startCheckin(){
 function renderCheckin(){
   var wrap=document.getElementById('checkin-wrap');
   if(!checkinQueue.length||checkinIdx>=checkinQueue.length){
-    wrap.innerHTML='<div class="checkin-card"><div class="checkin-done">&#127881; All done for today!</div><button class="na-btn" style="margin-top:.5rem" onclick="document.getElementById(\'checkin-wrap\').style.display=\'none\'">close</button></div>';
+    wrap.innerHTML='<div class="checkin-card"><div class="checkin-done">&#127881; All done for today!</div>'
+      +'<button class="na-btn" style="margin-top:.5rem" onclick="document.getElementById(\'checkin-wrap\').style.display=\'none\'">close</button></div>';
     return;
   }
   var node=checkinQueue[checkinIdx];
@@ -607,13 +659,12 @@ function renderCheckin(){
   wrap.innerHTML='<div class="checkin-card">'
     +'<div class="checkin-prog">'+checkinIdx+' / '+checkinQueue.length+'</div>'
     +'<div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div>'
-    +'<div class="checkin-path">'+ancestorLabels(node.id)+(streak>0?' &nbsp;&#183;&nbsp; '+streak+'d streak':'')+'</div>'
+    +'<div class="checkin-path">'+escHtml(ancestorLabels(node.id))+(streak>0?' · '+streak+'d streak':'')+'</div>'
     +'<div class="checkin-q">'+escHtml(node.label)+'?</div>'
     +'<div class="checkin-btns">'
     +'<button class="ci-btn ci-yes" onclick="checkinAnswer(\'done\')">&#10003; Done</button>'
     +'<button class="ci-btn ci-skip" onclick="checkinAnswer(\'skip\')">Skip</button>'
-    +'</div>'
-    +'</div>';
+    +'</div></div>';
 }
 async function checkinAnswer(status){
   var node=checkinQueue[checkinIdx];
@@ -736,16 +787,14 @@ function setFilter(f){listFilter=f;document.querySelectorAll('.filter-btn').forE
 // ── Stats ─────────────────────────────────────────────────────────
 function renderStats(){
   var dateStr=TODAY.toISOString().split('T')[0];
-  var active=checkableLeaves();   // not hidden
-  var mastered=masteredLeaves();  // hidden
-  var all=allLeaves();
+  var active=checkableRegs();
+  var mastered=masteredRegs();
   var todayLogs=logs.filter(function(l){return l.date===dateStr;});
   var todayDone=todayLogs.filter(function(l){return l.status==='done';}).length;
-  // today % counts only active leaves
   var todayPct=active.length?Math.round(todayDone/active.length*100):0;
   document.getElementById('st-today').textContent=todayPct+'%';
 
-  // 7-day avg over active leaves
+  // 7-day avg
   var total=0,days=0;
   for(var i=1;i<=7;i++){
     var d=new Date(TODAY);d.setDate(d.getDate()-i);
@@ -764,21 +813,18 @@ function renderStats(){
     if(sdl>0)streak++;else break;
   }
   document.getElementById('st-streak').textContent=streak;
-
-  // mastered count card
   var mastEl=document.getElementById('st-mastered');
   if(mastEl)mastEl.textContent=mastered.length;
 
-  // area bars — include mastered as separate category within each area
+  // area bars
   var topNodes=childrenOf(null);
   var barsHTML=topNodes.map(function(area){
-    function getLeaves(nid){var ch=childrenOf(nid);if(!ch.length)return[nid];var all=[];ch.forEach(function(c){all=all.concat(getLeaves(c.id));});return all;}
-    var aLeaves=getLeaves(area.id);
-    var aActive=aLeaves.filter(function(id){var n=nodes.find(function(x){return x.id===id;});return n&&!n.hidden_from_checkin;});
-    var aMastered=aLeaves.filter(function(id){var n=nodes.find(function(x){return x.id===id;});return n&&n.hidden_from_checkin;});
-    var aDone=aActive.filter(function(id){var l=todayLogs.find(function(x){return x.node_id===id;});return l&&l.status==='done';}).length;
+    var aRegs=regulationsUnder(area.id);
+    var aActive=aRegs.filter(function(n){return !n.hidden_from_checkin;});
+    var aMastered=aRegs.filter(function(n){return n.hidden_from_checkin;});
+    var aDone=aActive.filter(function(n){var l=todayLogs.find(function(x){return x.node_id===n.id;});return l&&l.status==='done';}).length;
     var pct=aActive.length?Math.round(aDone/aActive.length*100):0;
-    var mastBadge=aMastered.length?'<span style="font-size:10px;color:#5DCAA5;margin-left:4px">★'+aMastered.length+' mastered</span>':'';
+    var mastBadge=aMastered.length?'<span style="font-size:10px;color:#5DCAA5;margin-left:4px">★'+aMastered.length+'</span>':'';
     return'<div class="area-bar-row">'
       +'<div class="area-bar-label">'+escHtml(area.label)+'</div>'
       +'<div class="area-bar-track"><div class="area-bar-fill" style="width:'+pct+'%"></div></div>'
@@ -786,6 +832,24 @@ function renderStats(){
       +'</div>';
   }).join('');
   document.getElementById('area-bars').innerHTML=barsHTML||'<p class="empty-state">no data yet</p>';
+
+  // mastered list in stats
+  var ml=document.getElementById('stats-mastered-list');
+  var ms=document.getElementById('stats-mastered-section');
+  if(ml&&ms){
+    if(mastered.length){
+      ms.style.display='';
+      ml.innerHTML=mastered.map(function(n){
+        var s=consecutiveStreak(n.id);
+        return'<div style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;margin-bottom:3px">'
+          +'<span style="font-size:11px;color:#5DCAA5;flex-shrink:0">★</span>'
+          +'<span style="flex:1;font-size:13px;color:#aaa">'+escHtml(ancestorLabels(n.id)?ancestorLabels(n.id)+' › '+n.label:n.label)+'</span>'
+          +'<span style="font-size:11px;color:#aaa">'+s+'d</span>'
+          +'<button class="na-btn" onclick="setNodeHidden(\''+n.id+'\',false)">restore</button>'
+          +'</div>';
+      }).join('');
+    } else ms.style.display='none';
+  }
 
   // todo stats
   var open=tasks.filter(function(t){return !t.done&&t.type!=='longterm';}).length;
