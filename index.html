@@ -493,18 +493,71 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
     </div>
     <div class="modal-field">
       <label>Repeat</label>
-      <select id="ev-repeat">
-        <option value="">no repeat</option>
-        <option value="daily">daily</option>
-        <option value="weekly">weekly</option>
-        <option value="monthly">monthly</option>
-        <option value="yearly">yearly</option>
+      <select id="ev-repeat" onchange="onRepeatChange()">
+        <option value="">Does not repeat</option>
+        <option value="daily">Daily</option>
+        <option value="weekly_on_day">Weekly on [day]</option>
+        <option value="monthly_on_nth">Monthly on the [nth weekday]</option>
+        <option value="annually">Annually on [date]</option>
+        <option value="weekdays">Every weekday (Monday to Friday)</option>
+        <option value="custom">Custom…</option>
       </select>
+      <div id="ev-repeat-label" style="font-size:12px;color:#aaa;margin-top:4px;display:none"></div>
     </div>
     <div class="modal-btns">
       <button class="modal-btn" id="ev-delete-btn" style="display:none;color:#c0392b;margin-right:auto" onclick="deleteEventFromModal()">delete</button>
       <button class="modal-btn" onclick="closeEventModal()">cancel</button>
       <button class="modal-btn primary" onclick="saveEvent()">save</button>
+    </div>
+  </div>
+</div>
+
+<!-- CUSTOM RECURRENCE MODAL -->
+<div class="modal-backdrop" id="recur-modal" style="display:none" onclick="if(event.target===this)closeRecurModal()">
+  <div class="modal" style="max-width:400px">
+    <h3>Custom recurrence</h3>
+    <div class="modal-field" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:13px;color:#555">Repeat every</span>
+      <input type="number" id="recur-n" min="1" max="999" value="1" style="width:60px"/>
+      <select id="recur-unit" onchange="onRecurUnitChange()">
+        <option value="day">day</option>
+        <option value="week" selected>week</option>
+        <option value="month">month</option>
+        <option value="year">year</option>
+      </select>
+    </div>
+    <div class="modal-field" id="recur-days-wrap">
+      <label style="display:block;margin-bottom:6px">Repeat on</label>
+      <div style="display:flex;gap:6px">
+        <button class="wd-btn" data-d="0">S</button>
+        <button class="wd-btn" data-d="1">M</button>
+        <button class="wd-btn" data-d="2">T</button>
+        <button class="wd-btn" data-d="3">W</button>
+        <button class="wd-btn" data-d="4">T</button>
+        <button class="wd-btn" data-d="5">F</button>
+        <button class="wd-btn" data-d="6">S</button>
+      </div>
+    </div>
+    <div class="modal-field">
+      <label style="display:block;margin-bottom:8px">Ends</label>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="radio" name="recur-end" value="never" checked onchange="onRecurEndChange()"/> Never
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="radio" name="recur-end" value="on" onchange="onRecurEndChange()"/> On
+          <input type="date" id="recur-end-date" style="display:none;font-size:13px;padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-family:inherit"/>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="radio" name="recur-end" value="after" onchange="onRecurEndChange()"/> After
+          <input type="number" id="recur-end-count" min="1" max="999" value="13" style="display:none;width:60px;font-size:13px;padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-family:inherit"/>
+          <span id="recur-end-count-label" style="display:none;font-size:13px;color:#aaa">occurrences</span>
+        </label>
+      </div>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn" onclick="closeRecurModal()">Cancel</button>
+      <button class="modal-btn primary" onclick="saveRecur()">Done</button>
     </div>
   </div>
 </div>
@@ -1254,10 +1307,64 @@ async function loadEvents(){
   events=d.map(dbToEvent);
 }
 function dbToEvent(r){
-  return{id:r.id,title:r.title,date:parseLocalDate(r.date),start_time:r.start_time||null,end_time:r.end_time||null,location:r.location||'',notes:r.notes||'',color:r.color||'blue',repeat:r.repeat||null};
+  return{
+    id:r.id,title:r.title,date:parseLocalDate(r.date),
+    start_time:r.start_time||null,end_time:r.end_time||null,
+    location:r.location||'',notes:r.notes||'',color:r.color||'blue',
+    repeat:r.repeat?parseRepeat(r.repeat):null,
+    repeat_end_date:r.repeat_end_date?parseLocalDate(r.repeat_end_date):null,
+    repeat_end_count:r.repeat_end_count||null
+  };
 }
 function eventToDb(e){
-  return{title:e.title,date:e.date.toISOString().split('T')[0],start_time:e.start_time||null,end_time:e.end_time||null,location:e.location||null,notes:e.notes||null,color:e.color||'blue',repeat:e.repeat||null};
+  return{
+    title:e.title,date:e.date.toISOString().split('T')[0],
+    start_time:e.start_time||null,end_time:e.end_time||null,
+    location:e.location||null,notes:e.notes||null,color:e.color||'blue',
+    repeat:e.repeat?JSON.stringify(e.repeat):null,
+    repeat_end_date:e.repeat_end_date?e.repeat_end_date.toISOString().split('T')[0]:null,
+    repeat_end_count:e.repeat_end_count||null
+  };
+}
+function parseRepeat(v){
+  if(!v)return null;
+  if(typeof v==='object')return v;
+  try{return JSON.parse(v);}catch(e){
+    // legacy string values
+    if(v==='daily')return{unit:'day',n:1};
+    if(v==='weekly')return{unit:'week',n:1};
+    if(v==='monthly')return{unit:'month',n:1};
+    if(v==='yearly')return{unit:'year',n:1};
+    return null;
+  }
+}
+function repeatLabel(repeat){
+  if(!repeat)return'';
+  var u=repeat.unit,n=repeat.n||1;
+  var dayNames=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  if(repeat.type==='weekly_on_day') return'Weekly on '+dayNames[repeat.dow];
+  if(repeat.type==='monthly_on_nth'){
+    var ord=['','first','second','third','fourth','fifth'];
+    return'Monthly on the '+ord[repeat.nth]+' '+dayNames[repeat.dow];
+  }
+  if(repeat.type==='annually') return'Annually on '+repeat.monthLabel;
+  if(repeat.type==='weekdays') return'Every weekday (Mon–Fri)';
+  if(repeat.type==='custom'){
+    var base=n===1?u:(n+' '+u+'s');
+    if(u==='week'&&repeat.days&&repeat.days.length){
+      var dn=['S','M','T','W','T','F','S'];
+      base+=' on '+repeat.days.map(function(d){return dn[d];}).join(',');
+    }
+    var end='';
+    if(repeat.endDate)end=', until '+parseLocalDate(repeat.endDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    else if(repeat.endCount)end=', '+repeat.endCount+' times';
+    return'Every '+base+end;
+  }
+  if(u==='day')return n===1?'Daily':'Every '+n+' days';
+  if(u==='week')return n===1?'Weekly':'Every '+n+' weeks';
+  if(u==='month')return n===1?'Monthly':'Every '+n+' months';
+  if(u==='year')return n===1?'Annually':'Every '+n+' years';
+  return'';
 }
 async function createEvent(e){
   var r=await fetch(api('events'),{method:'POST',headers:sbHeaders(),body:JSON.stringify(eventToDb(e))});
@@ -1289,16 +1396,53 @@ function eventsOnDate(date){
   }).sort(function(a,b){return(a.start_time||'00:00').localeCompare(b.start_time||'00:00');});
 }
 function eventRepeatOnDate(e,date){
-  if(!e.repeat)return sameDay(e.date,date);
-  var d=new Date(e.date),safety=0;
-  // walk forward
-  while(d<=date&&safety<500){
-    if(sameDay(d,date))return true;
-    if(e.repeat==='daily')d.setDate(d.getDate()+1);
-    else if(e.repeat==='weekly')d.setDate(d.getDate()+7);
-    else if(e.repeat==='monthly')d.setMonth(d.getMonth()+1);
-    else if(e.repeat==='yearly')d.setFullYear(d.getFullYear()+1);
-    else break;safety++;
+  var r=e.repeat;
+  if(!r)return sameDay(e.date,date);
+  // check end constraints
+  if(e.repeat_end_date&&date>e.repeat_end_date)return false;
+  var anchor=e.date;
+  if(date<anchor)return false;
+  var dow=date.getDay(),dom=date.getDate();
+  var diffDays=Math.round((date-anchor)/86400000);
+  if(r.type==='weekly_on_day') return dow===r.dow;
+  if(r.type==='monthly_on_nth'){
+    if(dow!==r.dow)return false;
+    // count which nth occurrence of this weekday in this month
+    var cnt=0;var d=new Date(date.getFullYear(),date.getMonth(),1);
+    while(d<=date){if(d.getDay()===r.dow)cnt++;d.setDate(d.getDate()+1);}
+    return cnt===r.nth;
+  }
+  if(r.type==='annually') return date.getMonth()===anchor.getMonth()&&dom===anchor.getDate();
+  if(r.type==='weekdays') return dow>=1&&dow<=5;
+  if(r.type==='custom'){
+    var n=r.n||1,u=r.unit||'day';
+    if(u==='day') return diffDays%n===0;
+    if(u==='week'){
+      if(r.days&&r.days.length){
+        // check it falls on a valid week iteration AND day
+        var weekNum=Math.floor(diffDays/7);
+        return weekNum%n===0&&r.days.indexOf(dow)>=0;
+      }
+      return diffDays%7===0;
+    }
+    if(u==='month'){
+      var mDiff=(date.getFullYear()-anchor.getFullYear())*12+(date.getMonth()-anchor.getMonth());
+      return mDiff%n===0&&dom===anchor.getDate();
+    }
+    if(u==='year'){
+      var yDiff=date.getFullYear()-anchor.getFullYear();
+      return yDiff%n===0&&date.getMonth()===anchor.getMonth()&&dom===anchor.getDate();
+    }
+  }
+  // legacy simple strings
+  if(r.unit==='day'&&r.n) return diffDays%(r.n)===0;
+  if(r.unit==='week'&&r.n) return diffDays%(r.n*7)===0;
+  if(r.unit==='month'&&r.n){
+    var md=(date.getFullYear()-anchor.getFullYear())*12+(date.getMonth()-anchor.getMonth());
+    return md%(r.n)===0&&dom===anchor.getDate();
+  }
+  if(r.unit==='year'&&r.n){
+    return (date.getFullYear()-anchor.getFullYear())%(r.n)===0&&date.getMonth()===anchor.getMonth()&&dom===anchor.getDate();
   }
   return false;
 }
@@ -1366,14 +1510,109 @@ function addEventFromNLP(){
   createEvent(e);
 }
 
+// ── Recurrence modal ──────────────────────────────────────────────
+var pendingRepeat=null; // set when custom is saved
+function onRepeatChange(){
+  var v=document.getElementById('ev-repeat').value;
+  if(v==='custom'){
+    openRecurModal();
+    return;
+  }
+  pendingRepeat=null;
+  updateRepeatLabel(v);
+}
+function updateRepeatLabel(v){
+  var el=document.getElementById('ev-repeat-label');
+  if(!v){el.style.display='none';return;}
+  var dateVal=document.getElementById('ev-date').value;
+  var d=dateVal?parseLocalDate(dateVal):TODAY;
+  var dayNames=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var label='';
+  if(v==='weekly_on_day') label='Weekly on '+dayNames[d.getDay()];
+  else if(v==='monthly_on_nth'){var nth=getNthWeekday(d);var ord=['','first','second','third','fourth','fifth'];label='Monthly on the '+ord[nth]+' '+dayNames[d.getDay()];}
+  else if(v==='annually') label='Annually on '+monthNames[d.getMonth()]+' '+d.getDate();
+  else if(v==='weekdays') label='Every weekday (Monday to Friday)';
+  else if(v==='daily') label='Daily';
+  else if(pendingRepeat) label=repeatLabel(pendingRepeat);
+  el.textContent=label;
+  el.style.display=label?'':'none';
+}
+function getNthWeekday(d){
+  var cnt=0,i=new Date(d.getFullYear(),d.getMonth(),1);
+  while(i<=d){if(i.getDay()===d.getDay())cnt++;i.setDate(i.getDate()+1);}
+  return cnt;
+}
+function openRecurModal(){
+  // pre-select the weekday of the event date
+  var dateVal=document.getElementById('ev-date').value;
+  var d=dateVal?parseLocalDate(dateVal):TODAY;
+  document.getElementById('recur-n').value=1;
+  document.getElementById('recur-unit').value='week';
+  document.querySelectorAll('#recur-modal .wd-btn').forEach(function(b){
+    b.classList.toggle('on',parseInt(b.dataset.d)===d.getDay());
+    b.onclick=function(){this.classList.toggle('on');};
+  });
+  document.querySelector('input[name=recur-end][value=never]').checked=true;
+  document.getElementById('recur-end-date').style.display='none';
+  document.getElementById('recur-end-count').style.display='none';
+  document.getElementById('recur-end-count-label').style.display='none';
+  onRecurUnitChange();
+  document.getElementById('recur-modal').style.display='flex';
+}
+function closeRecurModal(){
+  document.getElementById('recur-modal').style.display='none';
+  // if user cancelled without saving, reset select back
+  if(!pendingRepeat) document.getElementById('ev-repeat').value='';
+}
+function onRecurUnitChange(){
+  var u=document.getElementById('recur-unit').value;
+  document.getElementById('recur-days-wrap').style.display=u==='week'?'':'none';
+}
+function onRecurEndChange(){
+  var v=document.querySelector('input[name=recur-end]:checked').value;
+  document.getElementById('recur-end-date').style.display=v==='on'?'':'none';
+  document.getElementById('recur-end-count').style.display=v==='after'?'':'none';
+  document.getElementById('recur-end-count-label').style.display=v==='after'?'':'none';
+}
+function saveRecur(){
+  var n=parseInt(document.getElementById('recur-n').value)||1;
+  var u=document.getElementById('recur-unit').value;
+  var days=[];
+  document.querySelectorAll('#recur-modal .wd-btn.on').forEach(function(b){days.push(parseInt(b.dataset.d));});
+  var endType=document.querySelector('input[name=recur-end]:checked').value;
+  var endDate=endType==='on'?document.getElementById('recur-end-date').value:null;
+  var endCount=endType==='after'?parseInt(document.getElementById('recur-end-count').value)||null:null;
+  pendingRepeat={type:'custom',unit:u,n:n,days:u==='week'?days:[],endDate:endDate||null,endCount:endCount};
+  document.getElementById('recur-modal').style.display='none';
+  document.getElementById('ev-repeat').value='custom';
+  updateRepeatLabel('custom');
+}
+
 // ── Event modal ───────────────────────────────────────────────────
 var editingEventId=null;
 function onAlldayToggle(){
   var allday=document.getElementById('ev-allday').checked;
   document.getElementById('ev-time-wrap').style.display=allday?'none':'grid';
 }
+function buildRepeatFromSelect(v, eventDate){
+  if(!v)return null;
+  var d=eventDate;
+  var dow=d.getDay();
+  if(v==='daily')return{unit:'day',n:1};
+  if(v==='weekly_on_day')return{type:'weekly_on_day',dow:dow,unit:'week',n:1};
+  if(v==='monthly_on_nth'){var nth=getNthWeekday(d);return{type:'monthly_on_nth',dow:dow,nth:nth,unit:'month',n:1};}
+  if(v==='annually'){
+    var mn=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    return{type:'annually',unit:'year',n:1,monthLabel:mn[d.getMonth()]+' '+d.getDate()};
+  }
+  if(v==='weekdays')return{type:'weekdays',unit:'day',n:1};
+  if(v==='custom')return pendingRepeat||null;
+  return null;
+}
 function openEventModal(id, prefillDate, prefillStart, prefillEnd, prefillAllday){
   editingEventId=id;
+  pendingRepeat=null;
   var isNew=!id;
   document.getElementById('event-modal-title').textContent=isNew?'New event':'Edit event';
   document.getElementById('ev-delete-btn').style.display=isNew?'none':'';
@@ -1388,6 +1627,7 @@ function openEventModal(id, prefillDate, prefillStart, prefillEnd, prefillAllday
     document.getElementById('ev-location').value='';
     document.getElementById('ev-notes').value='';
     document.getElementById('ev-repeat').value='';
+    document.getElementById('ev-repeat-label').style.display='none';
     selectColor('blue');
   } else {
     var e=events.find(function(x){return x.id===id;});if(!e)return;
@@ -1399,29 +1639,47 @@ function openEventModal(id, prefillDate, prefillStart, prefillEnd, prefillAllday
     document.getElementById('ev-end').value=e.end_time||'';
     document.getElementById('ev-location').value=e.location||'';
     document.getElementById('ev-notes').value=e.notes||'';
-    document.getElementById('ev-repeat').value=e.repeat||'';
+    // restore repeat select
+    var rv='';
+    if(e.repeat){
+      var rt=e.repeat.type;
+      if(rt==='weekly_on_day')rv='weekly_on_day';
+      else if(rt==='monthly_on_nth')rv='monthly_on_nth';
+      else if(rt==='annually')rv='annually';
+      else if(rt==='weekdays')rv='weekdays';
+      else if(rt==='custom'){rv='custom';pendingRepeat=e.repeat;}
+      else if(e.repeat.unit==='day'&&e.repeat.n===1)rv='daily';
+      else{rv='custom';pendingRepeat=e.repeat;}
+    }
+    document.getElementById('ev-repeat').value=rv;
+    updateRepeatLabel(rv);
     selectColor(e.color||'blue');
   }
   onAlldayToggle();
   document.getElementById('event-modal').style.display='flex';
   document.getElementById('ev-title').focus();
 }
-function closeEventModal(){document.getElementById('event-modal').style.display='none';editingEventId=null;}
+function closeEventModal(){document.getElementById('event-modal').style.display='none';editingEventId=null;pendingRepeat=null;}
 async function saveEvent(){
   var title=document.getElementById('ev-title').value.trim();
   if(!title)return;
   var dateVal=document.getElementById('ev-date').value;
   if(!dateVal)return;
   var allday=document.getElementById('ev-allday').checked;
+  var repeatVal=document.getElementById('ev-repeat').value;
+  var eventDate=parseLocalDate(dateVal);
+  var repeatObj=buildRepeatFromSelect(repeatVal,eventDate);
   var e={
     title:title,
-    date:parseLocalDate(dateVal),
+    date:eventDate,
     start_time:allday?null:(document.getElementById('ev-start').value||null),
     end_time:allday?null:(document.getElementById('ev-end').value||null),
     location:document.getElementById('ev-location').value.trim(),
     notes:document.getElementById('ev-notes').value.trim(),
     color:selectedColor,
-    repeat:document.getElementById('ev-repeat').value||null
+    repeat:repeatObj,
+    repeat_end_date:repeatObj&&repeatObj.endDate?parseLocalDate(repeatObj.endDate):null,
+    repeat_end_count:repeatObj&&repeatObj.endCount?repeatObj.endCount:null
   };
   closeEventModal();
   if(editingEventId){e.id=editingEventId;await updateEvent(e);}
@@ -1693,11 +1951,13 @@ function weekDragEnd(e,dayOff){
       if(item.type==='event'){
         var e=item.obj;
         var timeStr=e.start_time?fmtTime(e.start_time)+(e.end_time?' – '+fmtTime(e.end_time):''):'all day';
+        var rl=e.repeat?repeatLabel(e.repeat):'';
         return'<div class="agenda-item" onclick="openEventModal(\''+e.id+'\',null)">'
-          +'<div class="agenda-dot" style="background:var(--ev-'+e.color+',#378ADD)"></div>'
+          +'<div class="agenda-dot ev-'+e.color+'" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px"></div>'
           +'<div class="agenda-time">'+timeStr+'</div>'
           +'<div><div class="agenda-title">'+escHtml(e.title)+'</div>'
           +(e.location?'<div class="agenda-sub">'+escHtml(e.location)+'</div>':'')
+          +(rl?'<div class="agenda-sub">&#8635; '+escHtml(rl)+'</div>':'')
           +'</div></div>';
       } else {
         var t=item.obj;
