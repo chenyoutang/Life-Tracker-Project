@@ -60,21 +60,29 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 
 /* checklist tree */
 .tree-node{margin-left:0}
-.node-row{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:6px;cursor:pointer}
-.node-row:hover{background:#f5f5f5}
-.node-toggle{width:16px;font-size:10px;color:#bbb;flex-shrink:0;text-align:center}
-.node-check{width:17px;height:17px;border:1.5px solid #ddd;border-radius:4px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px}
+/* tree blocks with gradient levels */
+.tree-node{margin-bottom:2px}
+.node-row{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:7px;cursor:pointer}
+.node-row:hover{filter:brightness(0.97)}
+.node-toggle{width:16px;font-size:10px;color:#888;flex-shrink:0;text-align:center}
+.node-check{width:17px;height:17px;border:1.5px solid rgba(0,0,0,0.15);border-radius:4px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px}
 .node-check.done{background:#E1F5EE;border-color:#5DCAA5;color:#0F6E56}
 .node-check.skip{background:#f5f5f5;border-color:#ccc;color:#aaa}
 .node-check.fail{background:#FCEBEB;border-color:#E24B4A;color:#A32D2D}
 .node-label{flex:1;font-size:14px}
-.node-label.l0{font-weight:600;font-size:15px}
-.node-label.l1{font-weight:500}
-.node-children{margin-left:20px;border-left:1px solid #f0f0f0;padding-left:4px}
+.node-label.l0{font-weight:700;font-size:15px}
+.node-label.l1{font-weight:600;font-size:14px}
+.node-label.l2{font-weight:500;font-size:13px}
+/* level blocks */
+.tree-block-0{background:linear-gradient(135deg,#f0f4ff,#e8f0ff);border:1px solid #c8d4f0;border-radius:9px;padding:4px 6px 4px 4px;margin-bottom:6px}
+.tree-block-1{background:linear-gradient(135deg,#f3f8f3,#e8f5e8);border:1px solid #c4dfc4;border-radius:7px;padding:3px 5px 3px 3px;margin:2px 0}
+.tree-block-2{background:linear-gradient(135deg,#fdf8f0,#faf0e4);border:1px solid #e8d8b8;border-radius:6px;padding:2px 4px 2px 3px;margin:1px 0}
+.tree-block-reg{background:#fafafa;border:1px solid #eeeeee;border-radius:5px;padding:1px 3px;margin:1px 0}
+.node-children{margin-left:14px;margin-top:3px}
 .node-actions{display:none;gap:3px}
 .node-row:hover .node-actions{display:flex}
-.na-btn{background:none;border:1px solid #e5e5e5;border-radius:4px;padding:1px 6px;font-size:10px;cursor:pointer;color:#888;font-family:inherit}
-.na-btn:hover{background:#f5f5f5;color:#333}
+.na-btn{background:none;border:1px solid rgba(0,0,0,0.12);border-radius:4px;padding:1px 6px;font-size:10px;cursor:pointer;color:#666;font-family:inherit}
+.na-btn:hover{background:rgba(0,0,0,0.06);color:#222}
 
 /* checkin */
 .checkin-card{background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:1.25rem;text-align:center;margin-bottom:.75rem}
@@ -480,6 +488,10 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 
   <!-- STATS TAB -->
   <div id="tab-stats" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+      <p class="section-label" style="margin-bottom:0">overview</p>
+      <button class="na-btn" style="color:#c0392b;border-color:#fcc;font-size:11px" onclick="confirmResetStats()">&#128465; reset stats</button>
+    </div>
 
     <!-- top stat cards -->
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
@@ -770,6 +782,19 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
   </div>
 </div>
 
+<!-- RESET STATS MODAL -->
+<div class="modal-backdrop" id="reset-modal" style="display:none" onclick="if(event.target===this)closeResetModal()">
+  <div class="modal" style="max-width:360px;text-align:center">
+    <div style="font-size:28px;margin-bottom:.5rem">&#9888;&#65039;</div>
+    <h3 style="margin-bottom:.5rem">Reset all stats?</h3>
+    <p style="font-size:13px;color:#888;margin-bottom:1.25rem">This will permanently delete all your check-in logs and task completion history. Your routine structure, tasks, and events will not be affected.</p>
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button class="modal-btn" onclick="closeResetModal()">cancel</button>
+      <button class="modal-btn" style="background:#A32D2D;color:#fff;border-color:#A32D2D" onclick="executeResetStats()">yes, reset everything</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Config ────────────────────────────────────────────────────────
 var SB_URL = 'https://esmnnedyfdjquvirarwr.supabase.co';
@@ -931,6 +956,21 @@ async function handleOAuthCallback(){
   window.history.replaceState(null,'',window.location.pathname);
   return true;
 }
+function confirmResetStats(){document.getElementById('reset-modal').style.display='flex';}
+function closeResetModal(){document.getElementById('reset-modal').style.display='none';}
+async function executeResetStats(){
+  closeResetModal();
+  setStatus('resetting…');
+  var uid=currentUser&&currentUser.user?currentUser.user.id:'';
+  await fetch(api('checklist_logs?user_id=eq.'+uid),{method:'DELETE',headers:sbHeaders()});
+  await fetch(api('checklist_nodes?user_id=eq.'+uid),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({last_done_date:null})});
+  logs=[];
+  nodes.forEach(function(n){n.last_done_date=null;});
+  setStatus('stats reset ✓');
+  setTimeout(function(){setStatus('');},2000);
+  renderAll();
+}
+
 async function boot(){
   var fromOAuth=await handleOAuthCallback();
   if(fromOAuth){await onSignedIn(false);return;}
@@ -1238,7 +1278,9 @@ function renderNode(node, level){
     ?'<div style="margin:1px 0 3px 38px;font-size:11px;color:#ddd;font-style:italic">add a regulation to track in check-in</div>'
     :'';
 
-  var html='<div class="tree-node" id="tn-'+node.id+'">';
+  var blockCls=reg?'tree-block-reg':level===0?'tree-block-0':level===1?'tree-block-1':'tree-block-2';
+
+  var html='<div class="tree-node '+blockCls+'" id="tn-'+node.id+'">';
   html+='<div class="node-row">';
   html+=toggle+checkBox;
   html+='<span class="node-label l'+Math.min(level,2)+'" style="'+labelStyle+'">'+escHtml(node.label)+'</span>';
@@ -1449,8 +1491,15 @@ function startCheckin(){
   document.getElementById('checkin-wrap').style.display='';
   renderCheckin();
 }
-function restartCheckin(){
-  // Re-checkin: rebuild full queue regardless of what was already logged
+async function restartCheckin(){
+  // delete all of today's logs so everything resets
+  var dateStr=TODAY.toISOString().split('T')[0];
+  var todayLogIds=logs.filter(function(l){return l.date===dateStr;}).map(function(l){return l.id;});
+  for(var i=0;i<todayLogIds.length;i++){
+    await fetch(api('checklist_logs?id=eq.'+todayLogIds[i]),{method:'DELETE',headers:sbHeaders()});
+  }
+  logs=logs.filter(function(l){return l.date!==dateStr;});
+  // rebuild full queue
   var regs=checkableRegs().filter(regDueToday);
   checkinQueue=[];
   regs.forEach(function(n){
@@ -1463,6 +1512,7 @@ function restartCheckin(){
   checkinIdx=0;
   document.getElementById('checkin-wrap').style.display='';
   renderCheckin();
+  renderAll();
 }
 function renderCheckin(){
   var wrap=document.getElementById('checkin-wrap');
@@ -1507,10 +1557,10 @@ function renderCheckin(){
       btns+='<button class="ci-btn ci-notyet" onclick="checkinAnswer(\'notyet\')">Not yet</button>';
     }
     btns+='<button class="ci-btn ci-skip" onclick="checkinSkip()">Later</button>';
-    // for every_n_days show "hasn't started" option if no logs exist at all
-    var s=nodeSchedule(node);
-    if(s.type==='every_n_days'&&!logs.find(function(l){return l.node_id===node.id&&l.status==='done';})){
-      btns+='<div style="margin-top:8px;width:100%"><button class="na-btn" style="font-size:11px" onclick="markNotStarted(\''+node.id+'\')">&#9646; Not started yet — pause tracking</button></div>';
+    // show "not started yet" for any regulation never completed
+    var hasEverDone=logs.some(function(l){return l.node_id===node.id&&l.status==='done';});
+    if(!hasEverDone){
+      btns+='<div style="margin-top:8px;width:100%;text-align:center"><button class="na-btn" style="font-size:11px;padding:3px 10px" onclick="markNotStarted(\''+node.id+'\')">&#9646; Not started yet — skip for now</button></div>';
     }
   }
 
