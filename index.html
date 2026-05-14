@@ -42,6 +42,7 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 .node-check{width:17px;height:17px;border:1.5px solid #ddd;border-radius:4px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px}
 .node-check.done{background:#E1F5EE;border-color:#5DCAA5;color:#0F6E56}
 .node-check.skip{background:#f5f5f5;border-color:#ccc;color:#aaa}
+.node-check.fail{background:#FCEBEB;border-color:#E24B4A;color:#A32D2D}
 .node-label{flex:1;font-size:14px}
 .node-label.l0{font-weight:600;font-size:15px}
 .node-label.l1{font-weight:500}
@@ -59,6 +60,8 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 .ci-btn{padding:10px 24px;border-radius:8px;border:1px solid #e5e5e5;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit}
 .ci-yes{background:#E1F5EE;color:#0F6E56;border-color:#9FE1CB}
 .ci-yes:hover{background:#9FE1CB}
+.ci-fail{background:#FCEBEB;color:#A32D2D;border-color:#F7C1C1}
+.ci-fail:hover{background:#F7C1C1}
 .ci-skip{background:#f5f5f5;color:#888}
 .ci-skip:hover{background:#eee}
 .checkin-done{font-size:15px;color:#0F6E56;padding:1rem 0}
@@ -162,6 +165,20 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 .modal-btn:hover{background:#f5f5f5}
 .wd-btn{padding:4px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px;cursor:pointer;background:#fff;font-family:inherit;color:#555}
 .wd-btn.on{background:#E1F5EE;border-color:#5DCAA5;color:#0F6E56;font-weight:500}
+
+/* node options dropdown */
+.node-opts-wrap{position:relative;display:inline-block}
+.node-opts-menu{display:none;position:absolute;right:0;top:100%;background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:4px;z-index:50;min-width:130px;box-shadow:0 4px 12px rgba(0,0,0,.08)}
+.node-opts-menu.open{display:block}
+.node-opts-menu button{display:block;width:100%;text-align:left;padding:5px 10px;font-size:12px;background:none;border:none;cursor:pointer;border-radius:5px;color:#444;font-family:inherit}
+.node-opts-menu button:hover{background:#f5f5f5}
+.node-opts-menu .menu-sep{height:1px;background:#f0f0f0;margin:3px 0}
+.opts-btn{background:none;border:1px solid #e5e5e5;border-radius:4px;padding:1px 7px;font-size:13px;cursor:pointer;color:#aaa;font-family:inherit;line-height:1.4}
+.opts-btn:hover{background:#f5f5f5;color:#333}
+/* status pill for regulations */
+.reg-status{display:inline-block;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500;cursor:pointer;margin-left:4px;vertical-align:middle}
+.reg-status.active{background:#E1F5EE;color:#0F6E56}
+.reg-status.paused{background:#f5f5f5;color:#aaa}
 </style>
 </head>
 <body>
@@ -468,24 +485,23 @@ async function logNode(nodeId, status){
   var dateStr=TODAY.toISOString().split('T')[0];
   var n=nodes.find(function(x){return x.id===nodeId;});
   var times=n?regTimes(n):1;
-  var todayDone=logs.filter(function(l){return l.node_id===nodeId&&l.date===dateStr&&l.status==='done';}).length;
-  // For multi-time regs, always append. For single, upsert.
-  if(times>1||todayDone===0){
-    var existing=times===1?logs.find(function(l){return l.node_id===nodeId&&l.date===dateStr;}):null;
-    if(existing){
-      await fetch(api('checklist_logs?id=eq.'+existing.id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({status:status})});
-      existing.status=status;
-    } else {
-      var r=await fetch(api('checklist_logs'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({node_id:nodeId,date:dateStr,status:status})});
-      var d=await r.json(); var row=Array.isArray(d)?d[0]:d; logs.push(row);
+  var todayDoneCount=logs.filter(function(l){return l.node_id===nodeId&&l.date===dateStr&&l.status==='done';}).length;
+  var existing=times===1?logs.find(function(l){return l.node_id===nodeId&&l.date===dateStr;}):null;
+  if(existing){
+    await fetch(api('checklist_logs?id=eq.'+existing.id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({status:status})});
+    existing.status=status;
+  } else {
+    var r=await fetch(api('checklist_logs'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({node_id:nodeId,date:dateStr,status:status})});
+    var d=await r.json(); var row=Array.isArray(d)?d[0]:d; logs.push(row);
+  }
+  // auto-hide only if done streak hit threshold (not on fail)
+  if(status==='done'){
+    var streak=consecutiveStreak(nodeId);
+    if(n&&!n.hidden_from_checkin&&streak>=masterStreak){
+      await setNodeHidden(nodeId,true); return;
     }
   }
-  var streak=consecutiveStreak(nodeId);
-  if(n&&!n.hidden_from_checkin&&streak>=masterStreak){
-    await setNodeHidden(nodeId,true);
-  } else {
-    renderAll();
-  }
+  renderAll();
 }
 function todayLog(nodeId){
   var dateStr=TODAY.toISOString().split('T')[0];
@@ -568,6 +584,8 @@ function isBareLead(node){
 
 // ── Render tree ───────────────────────────────────────────────────
 var expanded={};
+var openMenuId=null;
+
 function renderTree(){
   var wrap=document.getElementById('tree-wrap');
   var roots=childrenOf(null);
@@ -580,14 +598,16 @@ function renderNode(node, level){
   var isExp=expanded[node.id]!==false;
   var reg=isRegulation(node);
   var leaf=isLeaf(node.id);
-  var bareleaf=isBareLead(node); // non-reg leaf with no children
+  var bareleaf=!reg&&leaf;
+  var paused=reg&&node.hidden_from_checkin;
+  var menuOpen=openMenuId===node.id;
 
-  // ── checkbox: only regulations get one ──
+  // ── checkbox: regulations only ──
   var log=reg?todayLog(node.id):null;
-  var checkCls=log?(log.status==='done'?'done':'skip'):'';
-  var checkIcon=log?(log.status==='done'?'&#10003;':'&#8212;'):'';
+  var checkCls=log?(log.status==='done'?'done':(log.status==='fail'?'fail':'skip')):'';
+  var checkIcon=log?(log.status==='done'?'&#10003;':(log.status==='fail'?'&#10007;':'&#8212;')):'';
   var checkBox=reg
-    ?'<div class="node-check '+checkCls+'" onclick="cycleLog(\''+node.id+'\')" title="done / skip / clear">'+checkIcon+'</div>'
+    ?'<div class="node-check '+checkCls+'" onclick="cycleLog(\''+node.id+'\')" title="cycle: done / failed / clear">'+checkIcon+'</div>'
     :'<div style="width:17px;flex-shrink:0"></div>';
 
   // ── toggle arrow ──
@@ -595,66 +615,67 @@ function renderNode(node, level){
     ?'<span class="node-toggle" onclick="toggleNode(\''+node.id+'\')" style="cursor:pointer">'+(isExp?'&#9660;':'&#9654;')+'</span>'
     :'<span class="node-toggle"></span>';
 
-  // ── streak badge (regulations only) ──
+  // ── streak + status badges ──
   var streak=reg?consecutiveStreak(node.id):0;
-  var mastered=reg&&node.hidden_from_checkin;
   var streakBadge='';
-  if(reg&&mastered) streakBadge='<span style="font-size:10px;color:#aaa;margin-left:4px">'+streak+'d ·  hidden</span>';
-  else if(reg&&streak>1) streakBadge='<span style="font-size:10px;color:#5DCAA5;margin-left:4px">'+streak+'d</span>';
+  if(reg&&paused) streakBadge='<span class="reg-status paused" onclick="setNodeHidden(\''+node.id+'\',false)" title="click to unpause">paused</span>';
+  else if(reg) streakBadge='<span class="reg-status active" onclick="setNodeHidden(\''+node.id+'\',true)" title="click to pause">active</span>';
+  if(reg&&streak>1) streakBadge+='<span style="font-size:10px;color:'+(paused?'#ccc':'#5DCAA5')+';margin-left:3px">'+streak+'d</span>';
 
   // ── label style ──
   var labelStyle='';
-  if(reg&&mastered) labelStyle='color:#ccc;';
+  if(reg&&paused) labelStyle='color:#ccc;';
   else if(reg) labelStyle='font-style:italic;color:#666;';
 
-  // ── hide/show all for parent nodes ──
-  var bulkBtns='';
-  if(!reg){
-    var visRegs=visibleRegsUnder(node.id);
-    var hidRegs=hiddenRegsUnder(node.id);
-    if(visRegs.length>0) bulkBtns+='<button class="na-btn" onclick="hideAllRegs(\''+node.id+'\',event)">hide all</button>';
-    if(hidRegs.length>0) bulkBtns+='<button class="na-btn" onclick="showAllRegs(\''+node.id+'\',event)">show all</button>';
-  }
+  // ── schedule inline ──
+  var schedInline=reg&&!paused?'<span style="font-size:10px;color:#ddd;margin-left:4px">'+escHtml(scheduleLabel(node))+'</span>':'';
 
-  // ── per-node actions ──
-  var actions='';
+  // ── bulk pause/unpause for parent nodes ──
+  var visRegs=!reg?visibleRegsUnder(node.id):[];
+  var hidRegs=!reg?hiddenRegsUnder(node.id):[];
+
+  // ── options menu ──
+  var menuHtml='';
   if(reg){
-    // regulation: schedule + hide/show + rename + delete
-    var schedLbl=scheduleLabel(node);
-    actions+='<span style="font-size:10px;color:#aaa;margin-right:2px">'+escHtml(schedLbl)+'</span>';
-    actions+='<button class="na-btn" onclick="openSchedModal(\''+node.id+'\')">schedule</button>';
-    if(!node.hidden_from_checkin)
-      actions+='<button class="na-btn" onclick="setNodeHidden(\''+node.id+'\',true)">hide</button>';
-    else
-      actions+='<button class="na-btn" onclick="setNodeHidden(\''+node.id+'\',false)">show</button>';
-    actions+='<button class="na-btn" onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\')">rename</button>';
-    actions+='<button class="na-btn" onclick="promptDelete(\''+node.id+'\')">del</button>';
+    // regulation ⋯ menu: schedule, rename, delete
+    menuHtml='<div class="node-opts-wrap">'
+      +'<button class="opts-btn" onclick="toggleMenu(\''+node.id+'\',event)">&#8943;</button>'
+      +'<div class="node-opts-menu'+(menuOpen?' open':'')+'" id="menu-'+node.id+'">'
+      +'<button onclick="openSchedModal(\''+node.id+'\');closeMenu()">&#128197; schedule</button>'
+      +'<button onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\');closeMenu()">&#9998; rename</button>'
+      +'<div class="menu-sep"></div>'
+      +'<button onclick="promptDelete(\''+node.id+'\');closeMenu()" style="color:#c0392b">&#128465; delete</button>'
+      +'</div></div>';
   } else {
-    // any non-regulation node: +child, +regulation, rename, delete
-    actions+='<button class="na-btn" onclick="promptAddChild(\''+node.id+'\')">+child</button>';
-    actions+='<button class="na-btn" onclick="promptAddRegulation(\''+node.id+'\')">+regulation</button>';
-    actions+=bulkBtns;
-    actions+='<button class="na-btn" onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\')">rename</button>';
-    actions+='<button class="na-btn" onclick="promptDelete(\''+node.id+'\')">del</button>';
+    // regular node: quick +child +reg inline, ⋯ for rest
+    var bulkItems='';
+    if(visRegs.length) bulkItems+='<button onclick="pauseAllRegs(\''+node.id+'\');closeMenu()">&#9646;&#9646; pause all</button>';
+    if(hidRegs.length) bulkItems+='<button onclick="unpauseAllRegs(\''+node.id+'\');closeMenu()">&#9654; unpause all</button>';
+    menuHtml='<button class="na-btn" onclick="promptAddChild(\''+node.id+'\')">+item</button>'
+      +'<button class="na-btn" onclick="promptAddRegulation(\''+node.id+'\')">+regulation</button>'
+      +'<div class="node-opts-wrap">'
+      +'<button class="opts-btn" onclick="toggleMenu(\''+node.id+'\',event)">&#8943;</button>'
+      +'<div class="node-opts-menu'+(menuOpen?' open':'')+'" id="menu-'+node.id+'">'
+      +bulkItems
+      +(bulkItems?'<div class="menu-sep"></div>':'')
+      +'<button onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\');closeMenu()">&#9998; rename</button>'
+      +'<div class="menu-sep"></div>'
+      +'<button onclick="promptDelete(\''+node.id+'\');closeMenu()" style="color:#c0392b">&#128465; delete</button>'
+      +'</div></div>';
   }
 
   // ── bare leaf hint ──
   var hint=bareleaf
-    ?'<div style="margin:2px 0 4px 38px;font-size:11px;color:#ccc;font-style:italic">no regulations yet — add one to track this in check-in</div>'
+    ?'<div style="margin:1px 0 3px 38px;font-size:11px;color:#ddd;font-style:italic">add a regulation to track in check-in</div>'
     :'';
-
-  var schedInline=reg&&!mastered?'<span style="font-size:10px;color:#ddd;margin-left:4px">'+escHtml(scheduleLabel(node))+'</span>':'';
 
   var html='<div class="tree-node" id="tn-'+node.id+'">';
   html+='<div class="node-row">';
-  html+=toggle;
-  html+=checkBox;
+  html+=toggle+checkBox;
   html+='<span class="node-label l'+Math.min(level,2)+'" style="'+labelStyle+'">'+escHtml(node.label)+'</span>';
-  html+=schedInline;
-  html+=streakBadge;
-  html+='<span class="node-actions">'+actions+'</span>';
-  html+='</div>';
-  html+=hint;
+  html+=schedInline+streakBadge;
+  html+='<span class="node-actions">'+menuHtml+'</span>';
+  html+='</div>'+hint;
   if(hasChildren&&isExp){
     html+='<div class="node-children">'+children.map(function(c){return renderNode(c,level+1);}).join('')+'</div>';
   }
@@ -663,13 +684,21 @@ function renderNode(node, level){
 }
 
 function toggleNode(id){expanded[id]=expanded[id]===false?true:false;renderTree();}
+function toggleMenu(id,e){
+  e&&e.stopPropagation();
+  openMenuId=(openMenuId===id?null:id);
+  renderTree();
+}
+function closeMenu(){openMenuId=null;renderTree();}
+// close menu when clicking anywhere else
+document.addEventListener('click',function(){if(openMenuId){openMenuId=null;renderTree();}});
 
 function cycleLog(nodeId){
   var n=nodes.find(function(x){return x.id===nodeId;});
   if(!n||!isRegulation(n))return;
   var log=todayLog(nodeId);
   if(!log) logNode(nodeId,'done');
-  else if(log.status==='done') logNode(nodeId,'skip');
+  else if(log.status==='done') logNode(nodeId,'fail');
   else{
     fetch(api('checklist_logs?id=eq.'+log.id),{method:'DELETE',headers:sbHeaders()});
     logs=logs.filter(function(l){return l.id!==log.id;}); renderAll();
@@ -682,13 +711,11 @@ function addRootNode(){var l=prompt('New area name:');if(l)addNode(l,null,999,'r
 function promptRename(id,cur){var l=prompt('Rename:',cur);if(l)renameNode(id,l);}
 function promptDelete(id){if(confirm('Delete this item and all its children?'))deleteNode(id);}
 
-async function hideAllRegs(nodeId,e){
-  e&&e.stopPropagation();
+async function pauseAllRegs(nodeId){
   var regs=visibleRegsUnder(nodeId);
   for(var i=0;i<regs.length;i++) await setNodeHidden(regs[i].id,true);
 }
-async function showAllRegs(nodeId,e){
-  e&&e.stopPropagation();
+async function unpauseAllRegs(nodeId){
   var regs=hiddenRegsUnder(nodeId);
   for(var i=0;i<regs.length;i++) await setNodeHidden(regs[i].id,false);
 }
@@ -862,6 +889,7 @@ function renderCheckin(){
     +'<div class="checkin-q">'+escHtml(node.label)+slotLabel+'</div>'
     +'<div class="checkin-btns">'
     +'<button class="ci-btn ci-yes" onclick="checkinAnswer(\'done\')">&#10003; Done</button>'
+    +'<button class="ci-btn ci-fail" onclick="checkinAnswer(\'fail\')">&#10007; Failed</button>'
     +'<button class="ci-btn ci-skip" onclick="checkinSkip()">Later</button>'
     +'</div></div>';
 }
