@@ -160,6 +160,8 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 .modal-btn.primary{background:#111;color:#fff;border-color:#111}
 .modal-btn.primary:hover{background:#333}
 .modal-btn:hover{background:#f5f5f5}
+.wd-btn{padding:4px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px;cursor:pointer;background:#fff;font-family:inherit;color:#555}
+.wd-btn.on{background:#E1F5EE;border-color:#5DCAA5;color:#0F6E56;font-weight:500}
 </style>
 </head>
 <body>
@@ -180,6 +182,7 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
   <div id="tab-checklist">
     <div style="display:flex;gap:8px;margin-bottom:.75rem">
       <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="startCheckin()">&#9654; Daily check-in</button>
+      <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="restartCheckin()">&#8635; re-check in</button>
       <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="addRootNode()">+ Add area</button>
     </div>
     <div id="checkin-wrap" style="display:none"></div>
@@ -309,6 +312,52 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
   </div>
 </div>
 
+<!-- SCHEDULE MODAL -->
+<div class="modal-backdrop" id="sched-modal" style="display:none" onclick="if(event.target===this)closeSchedModal()">
+  <div class="modal">
+    <h3>Schedule</h3>
+    <div class="modal-field">
+      <label>Frequency type</label>
+      <select id="sched-type" onchange="onSchedTypeChange()">
+        <option value="daily">Every day</option>
+        <option value="times_per_day">Multiple times a day</option>
+        <option value="every_n_days">Every N days</option>
+        <option value="weekday">Specific weekday(s)</option>
+        <option value="month_day">Day of month (e.g. 1st)</option>
+      </select>
+    </div>
+    <div class="modal-field" id="sched-times-wrap" style="display:none">
+      <label>Times per day</label>
+      <input type="number" id="sched-times" min="2" max="10" value="2" style="width:80px"/>
+      <span style="font-size:12px;color:#aaa;margin-left:8px">will appear as #1, #2… in check-in</span>
+    </div>
+    <div class="modal-field" id="sched-n-wrap" style="display:none">
+      <label>Every N days</label>
+      <input type="number" id="sched-n" min="2" max="365" value="2" style="width:80px"/>
+    </div>
+    <div class="modal-field" id="sched-weekday-wrap" style="display:none">
+      <label>Weekdays</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px" id="sched-weekday-btns">
+        <button class="wd-btn" data-d="0">Sun</button>
+        <button class="wd-btn" data-d="1">Mon</button>
+        <button class="wd-btn" data-d="2">Tue</button>
+        <button class="wd-btn" data-d="3">Wed</button>
+        <button class="wd-btn" data-d="4">Thu</button>
+        <button class="wd-btn" data-d="5">Fri</button>
+        <button class="wd-btn" data-d="6">Sat</button>
+      </div>
+    </div>
+    <div class="modal-field" id="sched-mday-wrap" style="display:none">
+      <label>Day of month</label>
+      <input type="number" id="sched-mday" min="1" max="31" value="1" style="width:80px"/>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn" onclick="closeSchedModal()">cancel</button>
+      <button class="modal-btn primary" onclick="saveSchedule()">save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Config ────────────────────────────────────────────────────────
 var SB_URL = 'https://esmnnedyfdjquvirarwr.supabase.co';
@@ -320,7 +369,6 @@ function api(path){return SB_URL+'/rest/v1/'+path;}
 var TODAY=new Date();TODAY.setHours(0,0,0,0);
 var tasks=[], nodes=[], logs=[];
 var calView='month', calOffset=0, listFilter='all';
-var checkinQueue=[], checkinIdx=0;
 var masterStreak=parseInt(localStorage.getItem('masterStreak')||'21');
 
 // ── Status ────────────────────────────────────────────────────────
@@ -386,9 +434,16 @@ async function seedDefaultNodes(){
 }
 async function addNode(label, parentId, order, nodeType){
   var type=nodeType||'regular';
-  var r=await fetch(api('checklist_nodes'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({label:label,parent_id:parentId||null,sort_order:order||0,node_type:type,hidden_from_checkin:false})});
+  var sched=type==='regulation'?{type:'daily',times:1}:null;
+  var body={label:label,parent_id:parentId||null,sort_order:order||0,node_type:type,hidden_from_checkin:false};
+  if(sched)body.schedule=sched;
+  var r=await fetch(api('checklist_nodes'),{method:'POST',headers:sbHeaders(),body:JSON.stringify(body)});
   var d=await r.json(); var row=Array.isArray(d)?d[0]:d;
   nodes.push(row); renderAll();
+}
+async function updateNodeSchedule(id, sched){
+  await fetch(api('checklist_nodes?id=eq.'+id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({schedule:sched})});
+  var n=nodes.find(function(x){return x.id===id;}); if(n) n.schedule=sched; renderAll();
 }
 async function deleteNode(id){
   await fetch(api('checklist_nodes?id=eq.'+id),{method:'DELETE',headers:sbHeaders()});
@@ -411,17 +466,21 @@ async function loadLogs(){
 }
 async function logNode(nodeId, status){
   var dateStr=TODAY.toISOString().split('T')[0];
-  var existing=logs.find(function(l){return l.node_id===nodeId&&l.date===dateStr;});
-  if(existing){
-    await fetch(api('checklist_logs?id=eq.'+existing.id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({status:status})});
-    existing.status=status;
-  } else {
-    var r=await fetch(api('checklist_logs'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({node_id:nodeId,date:dateStr,status:status})});
-    var d=await r.json(); var row=Array.isArray(d)?d[0]:d; logs.push(row);
-  }
-  // after logging, check if this node just hit the mastery streak and auto-hide
-  var streak=consecutiveStreak(nodeId);
   var n=nodes.find(function(x){return x.id===nodeId;});
+  var times=n?regTimes(n):1;
+  var todayDone=logs.filter(function(l){return l.node_id===nodeId&&l.date===dateStr&&l.status==='done';}).length;
+  // For multi-time regs, always append. For single, upsert.
+  if(times>1||todayDone===0){
+    var existing=times===1?logs.find(function(l){return l.node_id===nodeId&&l.date===dateStr;}):null;
+    if(existing){
+      await fetch(api('checklist_logs?id=eq.'+existing.id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({status:status})});
+      existing.status=status;
+    } else {
+      var r=await fetch(api('checklist_logs'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({node_id:nodeId,date:dateStr,status:status})});
+      var d=await r.json(); var row=Array.isArray(d)?d[0]:d; logs.push(row);
+    }
+  }
+  var streak=consecutiveStreak(nodeId);
   if(n&&!n.hidden_from_checkin&&streak>=masterStreak){
     await setNodeHidden(nodeId,true);
   } else {
@@ -431,6 +490,10 @@ async function logNode(nodeId, status){
 function todayLog(nodeId){
   var dateStr=TODAY.toISOString().split('T')[0];
   return logs.find(function(l){return l.node_id===nodeId&&l.date===dateStr;})||null;
+}
+function todayDoneCount(nodeId){
+  var dateStr=TODAY.toISOString().split('T')[0];
+  return logs.filter(function(l){return l.node_id===nodeId&&l.date===dateStr&&l.status==='done';}).length;
 }
 // count how many consecutive days ending yesterday (or today if done) this node was done
 function consecutiveStreak(nodeId){
@@ -556,7 +619,10 @@ function renderNode(node, level){
   // ── per-node actions ──
   var actions='';
   if(reg){
-    // regulation: hide/show + rename + delete
+    // regulation: schedule + hide/show + rename + delete
+    var schedLbl=scheduleLabel(node);
+    actions+='<span style="font-size:10px;color:#aaa;margin-right:2px">'+escHtml(schedLbl)+'</span>';
+    actions+='<button class="na-btn" onclick="openSchedModal(\''+node.id+'\')">schedule</button>';
     if(!node.hidden_from_checkin)
       actions+='<button class="na-btn" onclick="setNodeHidden(\''+node.id+'\',true)">hide</button>';
     else
@@ -577,11 +643,14 @@ function renderNode(node, level){
     ?'<div style="margin:2px 0 4px 38px;font-size:11px;color:#ccc;font-style:italic">no regulations yet — add one to track this in check-in</div>'
     :'';
 
+  var schedInline=reg&&!mastered?'<span style="font-size:10px;color:#ddd;margin-left:4px">'+escHtml(scheduleLabel(node))+'</span>':'';
+
   var html='<div class="tree-node" id="tn-'+node.id+'">';
   html+='<div class="node-row">';
   html+=toggle;
   html+=checkBox;
   html+='<span class="node-label l'+Math.min(level,2)+'" style="'+labelStyle+'">'+escHtml(node.label)+'</span>';
+  html+=schedInline;
   html+=streakBadge;
   html+='<span class="node-actions">'+actions+'</span>';
   html+='</div>';
@@ -635,41 +704,178 @@ function saveSettings(){
   if(v>0){masterStreak=v;localStorage.setItem('masterStreak',v);}
 }
 
-// ── Check-in ──────────────────────────────────────────────────────
-function startCheckin(){
-  var regs=checkableRegs();
+// ── Schedule helpers ──────────────────────────────────────────────
+function nodeSchedule(node){
+  // safe parse — returns object with defaults
+  var s=node.schedule;
+  if(!s||typeof s!=='object') return {type:'daily',times:1};
+  return {type:s.type||'daily', times:s.times||1, n:s.n||2, days:s.days||[], mday:s.mday||1};
+}
+function scheduleLabel(node){
+  var s=nodeSchedule(node);
+  if(s.type==='daily') return s.times>1?s.times+'x / day':'daily';
+  if(s.type==='times_per_day') return s.times+'x / day';
+  if(s.type==='every_n_days') return 'every '+s.n+' days';
+  if(s.type==='weekday'){var dn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];return (s.days||[]).map(function(d){return dn[d];}).join(', ')||'weekday';}
+  if(s.type==='month_day') return 'day '+s.mday+' of month';
+  return 'daily';
+}
+function regDueToday(node){
+  // Is this regulation scheduled to appear today?
+  var s=nodeSchedule(node);
+  var dow=TODAY.getDay(); // 0=Sun
+  var dom=TODAY.getDate();
+  if(s.type==='daily'||s.type==='times_per_day') return true;
+  if(s.type==='every_n_days'){
+    // Use epoch days from a fixed anchor; due if diff % n === 0
+    var epoch=Math.floor(TODAY.getTime()/86400000);
+    return epoch%s.n===0;
+  }
+  if(s.type==='weekday') return (s.days||[]).indexOf(dow)>=0;
+  if(s.type==='month_day') return dom===s.mday;
+  return true;
+}
+// How many times does this reg appear in today's queue?
+function regTimes(node){
+  var s=nodeSchedule(node);
+  if(s.type==='times_per_day'||(s.type==='daily'&&s.times>1)) return s.times||2;
+  return 1;
+}
+// How many times has this node been logged 'done' today?
+function doneTodayCount(nodeId){
   var dateStr=TODAY.toISOString().split('T')[0];
-  checkinQueue=regs.filter(function(n){
-    return !logs.find(function(x){return x.node_id===n.id&&x.date===dateStr;});
+  return logs.filter(function(l){return l.node_id===nodeId&&l.date===dateStr&&l.status==='done';}).length;
+}
+
+// ── Schedule modal ────────────────────────────────────────────────
+var schedNodeId=null;
+function openSchedModal(id){
+  schedNodeId=id;
+  var n=nodes.find(function(x){return x.id===id;});
+  if(!n)return;
+  var s=nodeSchedule(n);
+  document.getElementById('sched-type').value=s.type==='daily'&&s.times>1?'times_per_day':s.type;
+  document.getElementById('sched-times').value=s.times||2;
+  document.getElementById('sched-n').value=s.n||2;
+  document.getElementById('sched-mday').value=s.mday||1;
+  // weekday buttons
+  document.querySelectorAll('.wd-btn').forEach(function(b){
+    b.classList.toggle('on',(s.days||[]).indexOf(parseInt(b.dataset.d))>=0);
+    b.onclick=function(){this.classList.toggle('on');};
   });
+  onSchedTypeChange();
+  document.getElementById('sched-modal').style.display='flex';
+}
+function closeSchedModal(){document.getElementById('sched-modal').style.display='none';schedNodeId=null;}
+function onSchedTypeChange(){
+  var t=document.getElementById('sched-type').value;
+  document.getElementById('sched-times-wrap').style.display=t==='times_per_day'?'':'none';
+  document.getElementById('sched-n-wrap').style.display=t==='every_n_days'?'':'none';
+  document.getElementById('sched-weekday-wrap').style.display=t==='weekday'?'':'none';
+  document.getElementById('sched-mday-wrap').style.display=t==='month_day'?'':'none';
+}
+async function saveSchedule(){
+  if(!schedNodeId)return;
+  var t=document.getElementById('sched-type').value;
+  var sched={type:t,times:1};
+  if(t==='times_per_day'){sched.type='daily';sched.times=parseInt(document.getElementById('sched-times').value)||2;}
+  else if(t==='every_n_days'){sched.n=parseInt(document.getElementById('sched-n').value)||2;}
+  else if(t==='weekday'){sched.days=[];document.querySelectorAll('.wd-btn.on').forEach(function(b){sched.days.push(parseInt(b.dataset.d));});}
+  else if(t==='month_day'){sched.mday=parseInt(document.getElementById('sched-mday').value)||1;}
+  closeSchedModal();
+  await updateNodeSchedule(schedNodeId,sched);
+}
+
+// ── Check-in ──────────────────────────────────────────────────────
+// Queue entries: {node, slot} where slot is 1-based (for multi-times)
+var checkinQueue=[], checkinIdx=0, checkinSkipped=[];
+
+function buildCheckinQueue(){
+  var regs=checkableRegs().filter(regDueToday);
+  var dateStr=TODAY.toISOString().split('T')[0];
+  var queue=[];
+  regs.forEach(function(n){
+    var times=regTimes(n);
+    var doneCount=doneTodayCount(n.id);
+    for(var slot=doneCount+1;slot<=times;slot++){
+      queue.push({node:n,slot:slot,total:times});
+    }
+  });
+  return queue;
+}
+function startCheckin(){
+  checkinQueue=buildCheckinQueue();
+  checkinSkipped=[];
+  checkinIdx=0;
+  document.getElementById('checkin-wrap').style.display='';
+  renderCheckin();
+}
+function restartCheckin(){
+  // Re-checkin: rebuild full queue regardless of what was already logged
+  var regs=checkableRegs().filter(regDueToday);
+  checkinQueue=[];
+  regs.forEach(function(n){
+    var times=regTimes(n);
+    for(var slot=1;slot<=times;slot++){
+      checkinQueue.push({node:n,slot:slot,total:times});
+    }
+  });
+  checkinSkipped=[];
   checkinIdx=0;
   document.getElementById('checkin-wrap').style.display='';
   renderCheckin();
 }
 function renderCheckin(){
   var wrap=document.getElementById('checkin-wrap');
-  if(!checkinQueue.length||checkinIdx>=checkinQueue.length){
-    wrap.innerHTML='<div class="checkin-card"><div class="checkin-done">&#127881; All done for today!</div>'
-      +'<button class="na-btn" style="margin-top:.5rem" onclick="document.getElementById(\'checkin-wrap\').style.display=\'none\'">close</button></div>';
+  // Done when main queue exhausted; then process skipped
+  if(checkinIdx>=checkinQueue.length){
+    if(checkinSkipped.length){
+      // move skipped back into queue
+      checkinQueue=checkinSkipped.slice();
+      checkinSkipped=[];
+      checkinIdx=0;
+      renderCheckin();
+      return;
+    }
+    wrap.innerHTML='<div class="checkin-card">'
+      +'<div class="checkin-done">&#127881; All done for today!</div>'
+      +'<div style="display:flex;gap:8px;justify-content:center;margin-top:.75rem">'
+      +'<button class="na-btn" style="padding:6px 14px" onclick="document.getElementById(\'checkin-wrap\').style.display=\'none\'">close</button>'
+      +'<button class="na-btn" style="padding:6px 14px" onclick="restartCheckin()">&#8635; re-check in</button>'
+      +'</div></div>';
     return;
   }
-  var node=checkinQueue[checkinIdx];
-  var pct=Math.round(checkinIdx/checkinQueue.length*100);
+  var entry=checkinQueue[checkinIdx];
+  var node=entry.node;
+  var total=checkinQueue.length+checkinSkipped.length;
+  var done=checkinIdx;
+  var pct=total?Math.round(done/total*100):0;
   var streak=consecutiveStreak(node.id);
+  var slotLabel=entry.total>1?' <span style="font-size:12px;color:#aaa">#'+entry.slot+' of '+entry.total+'</span>':'';
+  var schedLbl=scheduleLabel(node);
   wrap.innerHTML='<div class="checkin-card">'
-    +'<div class="checkin-prog">'+checkinIdx+' / '+checkinQueue.length+'</div>'
+    +'<div class="checkin-prog">'+done+' / '+total+(checkinSkipped.length?' · '+checkinSkipped.length+' skipped':'')+'</div>'
     +'<div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div>'
-    +'<div class="checkin-path">'+escHtml(ancestorLabels(node.id))+(streak>0?' · '+streak+'d streak':'')+'</div>'
-    +'<div class="checkin-q">'+escHtml(node.label)+'?</div>'
+    +'<div class="checkin-path">'+escHtml(ancestorLabels(node.id))
+      +' <span style="color:#ccc">·</span> <span style="color:#aaa;font-size:10px">'+escHtml(schedLbl)+'</span>'
+      +(streak>0?' <span style="color:#5DCAA5;font-size:10px">· '+streak+'d</span>':'')+'</div>'
+    +'<div class="checkin-q">'+escHtml(node.label)+slotLabel+'</div>'
     +'<div class="checkin-btns">'
     +'<button class="ci-btn ci-yes" onclick="checkinAnswer(\'done\')">&#10003; Done</button>'
-    +'<button class="ci-btn ci-skip" onclick="checkinAnswer(\'skip\')">Skip</button>'
+    +'<button class="ci-btn ci-skip" onclick="checkinSkip()">Later</button>'
     +'</div></div>';
 }
 async function checkinAnswer(status){
-  var node=checkinQueue[checkinIdx];
-  await logNode(node.id,status);
+  var entry=checkinQueue[checkinIdx];
+  await logNode(entry.node.id,status);
   checkinIdx++;
+  renderCheckin();
+}
+function checkinSkip(){
+  // move current entry to skipped pile, advance
+  checkinSkipped.push(checkinQueue[checkinIdx]);
+  checkinQueue.splice(checkinIdx,1);
+  // don't increment idx since we removed the current item
   renderCheckin();
 }
 
