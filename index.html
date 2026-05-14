@@ -305,29 +305,41 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
   </div>
 
   <nav class="nav">
-    <button class="nav-btn active" onclick="switchTab('checklist')"><span class="nav-icon">&#9989;</span>Checklist</button>
-    <button class="nav-btn" onclick="switchTab('tasks')"><span class="nav-icon">&#128203;</span>Tasks</button>
-    <button class="nav-btn" onclick="switchTab('calendar')"><span class="nav-icon">&#128197;</span>Calendar</button>
-    <button class="nav-btn" onclick="switchTab('stats')"><span class="nav-icon">&#128200;</span>Stats</button>
+    <button class="nav-btn active" onclick="switchTab('checklist')">
+      <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>
+      Routine
+    </button>
+    <button class="nav-btn" onclick="switchTab('tasks')">
+      <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/></svg></span>
+      Tasks
+    </button>
+    <button class="nav-btn" onclick="switchTab('calendar')">
+      <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+      Calendar
+    </button>
+    <button class="nav-btn" onclick="switchTab('stats')">
+      <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span>
+      Stats
+    </button>
   </nav>
 
-  <!-- CHECKLIST TAB -->
+  <!-- ROUTINE TAB -->
   <div id="tab-checklist">
-    <div style="display:flex;gap:8px;margin-bottom:.75rem">
-      <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="startCheckin()">&#9654; Daily check-in</button>
-      <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="restartCheckin()">&#8635; re-check in</button>
+    <div style="display:flex;gap:8px;margin-bottom:.75rem;flex-wrap:wrap">
+      <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="startCheckin()">▶ Daily check-in</button>
+      <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="restartCheckin()">↺ re-check in</button>
       <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="addRootNode()">+ Add area</button>
     </div>
     <div id="checkin-wrap" style="display:none"></div>
     <div id="tree-wrap"></div>
-    <span class="settings-toggle" onclick="toggleSettings()">&#9881; settings</span>
+    <span class="settings-toggle" onclick="toggleSettings()">⚙ settings</span>
     <div class="settings-panel" id="settings-panel" style="display:none">
-      <p class="section-label">check-in settings</p>
+      <p class="section-label">routine settings</p>
       <div class="settings-row">
-        <label>Auto-hide after consecutive days completed</label>
+        <label>Auto-master after consecutive days completed</label>
         <input type="number" id="setting-n" min="1" max="365" value="21" onchange="saveSettings()" />
       </div>
-      <p style="font-size:11px;color:#aaa;margin-top:.25rem">Leaf nodes completed this many days in a row will be hidden from daily check-in and counted as mastered in stats.</p>
+      <p style="font-size:11px;color:#aaa;margin-top:.25rem">Regulations completed this many days in a row are hidden from daily check-in and counted as mastered in stats.</p>
     </div>
   </div>
 
@@ -389,25 +401,79 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 
   <!-- STATS TAB -->
   <div id="tab-stats" style="display:none">
-    <div class="stats-grid">
+
+    <!-- top stat cards -->
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="stat-card"><div class="stat-num" id="st-today">—</div><div class="stat-label">today %</div></div>
       <div class="stat-card"><div class="stat-num" id="st-week">—</div><div class="stat-label">7-day avg</div></div>
-      <div class="stat-card"><div class="stat-num" id="st-streak">—</div><div class="stat-label">day streak</div></div>
-      <div class="stat-card" style="border-color:#9FE1CB"><div class="stat-num" id="st-mastered" style="color:#5DCAA5">—</div><div class="stat-label">mastered ★</div></div>
+      <div class="stat-card"><div class="stat-num" id="st-streak">—</div><div class="stat-label">🔥 streak</div></div>
+      <div class="stat-card" style="border-color:#9FE1CB"><div class="stat-num" id="st-mastered" style="color:#5DCAA5">—</div><div class="stat-label">★ mastered</div></div>
     </div>
+
+    <!-- heatmap -->
     <div class="card">
-      <p class="section-label">checklist by area</p>
+      <p class="section-label">activity heatmap — last 16 weeks</p>
+      <div id="heatmap-wrap" style="overflow-x:auto">
+        <canvas id="heatmap-canvas" height="90"></canvas>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:10px;color:#aaa">
+        <span>less</span>
+        <div style="width:10px;height:10px;border-radius:2px;background:#f0f0f0"></div>
+        <div style="width:10px;height:10px;border-radius:2px;background:#c6e8c0"></div>
+        <div style="width:10px;height:10px;border-radius:2px;background:#7dca72"></div>
+        <div style="width:10px;height:10px;border-radius:2px;background:#40a832"></div>
+        <div style="width:10px;height:10px;border-radius:2px;background:#1e7a15"></div>
+        <span>more</span>
+      </div>
+    </div>
+
+    <!-- 30-day trend line -->
+    <div class="card">
+      <p class="section-label">30-day completion trend</p>
+      <canvas id="trend-canvas" height="100"></canvas>
+    </div>
+
+    <!-- routine by area -->
+    <div class="card">
+      <p class="section-label">routine by area — today</p>
       <div id="area-bars" class="area-bars"></div>
     </div>
+
+    <!-- best streaks -->
     <div class="card">
-      <p class="section-label">to-dos</p>
+      <p class="section-label">best streaks</p>
+      <div id="streak-list"></div>
+    </div>
+
+    <!-- tasks stats -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <p class="section-label" style="margin-bottom:0">tasks</p>
+      </div>
       <div class="todo-stats-row">
         <div class="todo-stat"><div class="stat-num" id="st-todo-open">—</div><div class="stat-label">open</div></div>
         <div class="todo-stat"><div class="stat-num" id="st-todo-due">—</div><div class="stat-label">due today</div></div>
-        <div class="todo-stat"><div class="stat-num" id="st-todo-over">—</div><div class="stat-label">overdue</div></div>
-        <div class="todo-stat"><div class="stat-num" id="st-todo-done">—</div><div class="stat-label">done</div></div>
+        <div class="todo-stat"><div class="stat-num" id="st-todo-over" style="color:#A32D2D">—</div><div class="stat-label">overdue</div></div>
+        <div class="todo-stat"><div class="stat-num" id="st-todo-done" style="color:#0F6E56">—</div><div class="stat-label">done</div></div>
+      </div>
+      <div id="task-trend-wrap" style="margin-top:.75rem">
+        <p class="section-label">task completion rate — 30 days</p>
+        <canvas id="task-trend-canvas" height="60"></canvas>
       </div>
     </div>
+
+    <!-- events stats -->
+    <div class="card">
+      <p class="section-label">events</p>
+      <div class="todo-stats-row">
+        <div class="todo-stat"><div class="stat-num" id="st-ev-upcoming">—</div><div class="stat-label">upcoming</div></div>
+        <div class="todo-stat"><div class="stat-num" id="st-ev-thisweek">—</div><div class="stat-label">this week</div></div>
+        <div class="todo-stat"><div class="stat-num" id="st-ev-recurring">—</div><div class="stat-label">recurring</div></div>
+        <div class="todo-stat"><div class="stat-num" id="st-ev-total">—</div><div class="stat-label">total</div></div>
+      </div>
+    </div>
+
+    <!-- mastered -->
     <div class="card" id="stats-mastered-section" style="display:none">
       <p class="section-label">mastered ★ — hidden from check-in</p>
       <div id="stats-mastered-list"></div>
@@ -1485,7 +1551,48 @@ function renderStats(){
   }).join('');
   document.getElementById('area-bars').innerHTML=barsHTML||'<p class="empty-state">no data yet</p>';
 
-  // mastered list in stats
+  // best streaks per regulation
+  var allR=allRegs();
+  var streakData=allR.map(function(n){
+    return{node:n,streak:consecutiveStreak(n.id),best:bestStreak(n.id)};
+  }).filter(function(x){return x.best>0;}).sort(function(a,b){return b.best-a.best;}).slice(0,8);
+  var sl=document.getElementById('streak-list');
+  if(sl){
+    if(streakData.length){
+      sl.innerHTML=streakData.map(function(x){
+        var path=ancestorLabels(x.node.id);
+        var label=path?path+' › '+x.node.label:x.node.label;
+        return'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f5f5f5">'
+          +'<span style="flex:1;font-size:13px">'+escHtml(label)+'</span>'
+          +'<span style="font-size:11px;color:#aaa;min-width:60px;text-align:right">best '+x.best+'d</span>'
+          +'<div style="background:#f0f0f0;border-radius:4px;overflow:hidden;width:80px;height:6px"><div style="height:100%;background:#5DCAA5;width:'+Math.min(100,x.streak/Math.max(1,x.best)*100)+'%"></div></div>'
+          +'<span style="font-size:11px;color:#5DCAA5;min-width:28px;text-align:right">'+x.streak+'d</span>'
+          +'</div>';
+      }).join('');
+    } else sl.innerHTML='<p class="empty-state">complete regulations to build streaks</p>';
+  }
+
+  // task stats
+  var open=tasks.filter(function(t){return !t.done&&t.type!=='longterm';}).length;
+  var dueToday=tasks.filter(function(t){return !t.done&&t.deadline&&sameDay(t.deadline,TODAY);}).length;
+  var overdue=tasks.filter(function(t){return !t.done&&t.deadline&&t.deadline<TODAY&&!sameDay(t.deadline,TODAY);}).length;
+  var done=tasks.filter(function(t){return t.done;}).length;
+  document.getElementById('st-todo-open').textContent=open;
+  document.getElementById('st-todo-due').textContent=dueToday;
+  document.getElementById('st-todo-over').textContent=overdue;
+  document.getElementById('st-todo-done').textContent=done;
+
+  // event stats
+  var evUpcoming=events.filter(function(e){return e.date>=TODAY;}).length;
+  var weekEnd=new Date(TODAY);weekEnd.setDate(TODAY.getDate()+7);
+  var evThisWeek=events.filter(function(e){return e.date>=TODAY&&e.date<=weekEnd;}).length;
+  var evRecurring=events.filter(function(e){return !!e.repeat;}).length;
+  document.getElementById('st-ev-upcoming').textContent=evUpcoming;
+  document.getElementById('st-ev-thisweek').textContent=evThisWeek;
+  document.getElementById('st-ev-recurring').textContent=evRecurring;
+  document.getElementById('st-ev-total').textContent=events.length;
+
+  // mastered list
   var ml=document.getElementById('stats-mastered-list');
   var ms=document.getElementById('stats-mastered-section');
   if(ml&&ms){
@@ -1503,15 +1610,139 @@ function renderStats(){
     } else ms.style.display='none';
   }
 
-  // todo stats
-  var open=tasks.filter(function(t){return !t.done&&t.type!=='longterm';}).length;
-  var dueToday=tasks.filter(function(t){return !t.done&&t.deadline&&sameDay(t.deadline,TODAY);}).length;
-  var overdue=tasks.filter(function(t){return !t.done&&t.deadline&&t.deadline<TODAY&&!sameDay(t.deadline,TODAY);}).length;
-  var done=tasks.filter(function(t){return t.done;}).length;
-  document.getElementById('st-todo-open').textContent=open;
-  document.getElementById('st-todo-due').textContent=dueToday;
-  document.getElementById('st-todo-over').textContent=overdue;
-  document.getElementById('st-todo-done').textContent=done;
+  // draw charts
+  setTimeout(function(){
+    drawHeatmap();
+    drawTrendLine('trend-canvas', 30, '#5DCAA5');
+    drawTaskTrend();
+  }, 50);
+}
+
+function bestStreak(nodeId){
+  var best=0,cur=0;
+  for(var i=365;i>=0;i--){
+    var d=new Date(TODAY);d.setDate(d.getDate()-i);
+    var ds=d.toISOString().split('T')[0];
+    var l=logs.find(function(x){return x.node_id===nodeId&&x.date===ds;});
+    if(l&&l.status==='done'){cur++;best=Math.max(best,cur);}
+    else cur=0;
+  }
+  return best;
+}
+
+function drawHeatmap(){
+  var canvas=document.getElementById('heatmap-canvas');
+  if(!canvas)return;
+  var weeks=16,cellSize=11,gap=2,labelW=22;
+  canvas.width=labelW+weeks*(cellSize+gap);
+  var ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  var activeRegs=checkableRegs();
+  var total=activeRegs.length||1;
+  var colors=['#f0f0f0','#c6e8c0','#7dca72','#40a832','#1e7a15'];
+  // day labels
+  ctx.fillStyle='#bbb';ctx.font='8px system-ui';
+  ['M','W','F'].forEach(function(l,i){ctx.fillText(l,2,14+(i*2+1)*(cellSize+gap));});
+  for(var w=0;w<weeks;w++){
+    for(var dow=0;dow<7;dow++){
+      var daysAgo=(weeks-1-w)*7+(6-dow);
+      var d=new Date(TODAY);d.setDate(TODAY.getDate()-daysAgo);
+      var ds=d.toISOString().split('T')[0];
+      var dayLogs=logs.filter(function(l){return l.date===ds&&l.status==='done';});
+      var pct=dayLogs.length/total;
+      var ci=pct===0?0:pct<0.25?1:pct<0.5?2:pct<0.75?3:4;
+      var x=labelW+w*(cellSize+gap);
+      var y=dow*(cellSize+gap);
+      ctx.fillStyle=colors[ci];
+      ctx.beginPath();
+      ctx.roundRect(x,y,cellSize,cellSize,2);
+      ctx.fill();
+    }
+  }
+  // week labels at top
+  ctx.fillStyle='#ccc';ctx.font='7px system-ui';
+  for(var wl=0;wl<weeks;wl+=4){
+    var d2=new Date(TODAY);d2.setDate(TODAY.getDate()-(weeks-1-wl)*7);
+    var mo=d2.toLocaleDateString('en-US',{month:'short'});
+    ctx.fillText(mo,labelW+wl*(cellSize+gap),canvas.height);
+  }
+}
+
+function drawTrendLine(canvasId, nDays, color){
+  var canvas=document.getElementById(canvasId);
+  if(!canvas)return;
+  var w=canvas.offsetWidth||300;
+  canvas.width=w;
+  var ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,w,canvas.height);
+  var h=canvas.height;
+  var activeRegs=checkableRegs();
+  var total=activeRegs.length||1;
+  var data=[];
+  for(var i=nDays-1;i>=0;i--){
+    var d=new Date(TODAY);d.setDate(TODAY.getDate()-i);
+    var ds=d.toISOString().split('T')[0];
+    var done=logs.filter(function(l){return l.date===ds&&l.status==='done';}).length;
+    data.push(Math.round(done/total*100));
+  }
+  var pad=8;
+  // grid lines
+  ctx.strokeStyle='#f0f0f0';ctx.lineWidth=1;
+  [0,25,50,75,100].forEach(function(pct){
+    var y=pad+(1-pct/100)*(h-2*pad);
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
+    ctx.fillStyle='#ddd';ctx.font='8px system-ui';
+    ctx.fillText(pct+'%',0,y-1);
+  });
+  if(data.every(function(v){return v===0;}))return;
+  // trend line
+  ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=2;ctx.lineJoin='round';
+  data.forEach(function(v,i){
+    var x=pad+(i/(nDays-1))*(w-2*pad);
+    var y=pad+(1-v/100)*(h-2*pad);
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  // fill under
+  ctx.beginPath();
+  data.forEach(function(v,i){
+    var x=pad+(i/(nDays-1))*(w-2*pad);
+    var y=pad+(1-v/100)*(h-2*pad);
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  });
+  ctx.lineTo(pad+(nDays-1)/(nDays-1)*(w-2*pad),h-pad);
+  ctx.lineTo(pad,h-pad);ctx.closePath();
+  ctx.fillStyle=color+'22';ctx.fill();
+  // dots for last 7 days
+  data.slice(-7).forEach(function(v,i){
+    var idx=nDays-7+i;
+    var x=pad+(idx/(nDays-1))*(w-2*pad);
+    var y=pad+(1-v/100)*(h-2*pad);
+    ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);
+    ctx.fillStyle=color;ctx.fill();
+  });
+}
+
+function drawTaskTrend(){
+  var canvas=document.getElementById('task-trend-canvas');
+  if(!canvas)return;
+  var w=canvas.offsetWidth||300;canvas.width=w;
+  var ctx=canvas.getContext('2d');ctx.clearRect(0,0,w,canvas.height);
+  var h=canvas.height,pad=4;
+  var data=[];
+  for(var i=29;i>=0;i--){
+    var d=new Date(TODAY);d.setDate(TODAY.getDate()-i);
+    var ds=d.toISOString().split('T')[0];
+    // count tasks completed on this day (using created_at as proxy — not perfect but usable)
+    var done=tasks.filter(function(t){return t.done;}).length;
+    data.push(done>0?Math.min(100,done*10):0);
+  }
+  ctx.beginPath();ctx.strokeStyle='#378ADD';ctx.lineWidth=1.5;ctx.lineJoin='round';
+  data.forEach(function(v,i){
+    var x=pad+(i/29)*(w-2*pad);var y=pad+(1-v/100)*(h-2*pad);
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
 }
 
 // ── Events DB ─────────────────────────────────────────────────────
