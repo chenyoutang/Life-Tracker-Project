@@ -137,6 +137,20 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 
 .empty-state{color:#ccc;font-size:13px;text-align:center;padding:1.25rem 0}
 .longterm-section{margin-top:.75rem}
+
+/* edit modal */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:100;display:flex;align-items:center;justify-content:center;padding:1rem}
+.modal{background:#fff;border-radius:12px;padding:1.25rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.15)}
+.modal h3{font-size:15px;font-weight:600;margin-bottom:1rem}
+.modal-field{margin-bottom:.75rem}
+.modal-field label{display:block;font-size:11px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.modal-field input,.modal-field select{width:100%;font-size:14px;padding:7px 10px;border:1px solid #ddd;border-radius:7px;font-family:inherit;background:#fff;color:#111}
+.modal-field input:focus,.modal-field select:focus{outline:none;border-color:#888}
+.modal-btns{display:flex;gap:8px;margin-top:1rem;justify-content:flex-end}
+.modal-btn{padding:7px 18px;border-radius:7px;border:1px solid #ddd;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit}
+.modal-btn.primary{background:#111;color:#fff;border-color:#111}
+.modal-btn.primary:hover{background:#333}
+.modal-btn:hover{background:#f5f5f5}
 </style>
 </head>
 <body>
@@ -224,6 +238,50 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
         <div class="todo-stat"><div class="stat-num" id="st-todo-over">—</div><div class="stat-label">overdue</div></div>
         <div class="todo-stat"><div class="stat-num" id="st-todo-done">—</div><div class="stat-label">done</div></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-backdrop" id="edit-modal" style="display:none" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal">
+    <h3>Edit task</h3>
+    <div class="modal-field">
+      <label>Title</label>
+      <input type="text" id="edit-title" />
+    </div>
+    <div class="modal-field">
+      <label>Type</label>
+      <select id="edit-type">
+        <option value="soft">soft — flexible deadline</option>
+        <option value="hard">hard — must do by date</option>
+        <option value="longterm">long-term — someday</option>
+      </select>
+    </div>
+    <div class="modal-field" id="edit-deadline-wrap">
+      <label>Deadline</label>
+      <input type="date" id="edit-deadline" />
+    </div>
+    <div class="modal-field">
+      <label>Repeat</label>
+      <select id="edit-repeat">
+        <option value="">no repeat</option>
+        <option value="daily">daily</option>
+        <option value="weekly">weekly</option>
+        <option value="monthly">monthly</option>
+        <option value="yearly">yearly</option>
+        <option value="every monday">every monday</option>
+        <option value="every tuesday">every tuesday</option>
+        <option value="every wednesday">every wednesday</option>
+        <option value="every thursday">every thursday</option>
+        <option value="every friday">every friday</option>
+        <option value="every saturday">every saturday</option>
+        <option value="every sunday">every sunday</option>
+      </select>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn" onclick="closeEditModal()">cancel</button>
+      <button class="modal-btn primary" onclick="saveEdit()">save</button>
     </div>
   </div>
 </div>
@@ -443,7 +501,10 @@ async function checkinAnswer(status){
 
 // ── NLP ───────────────────────────────────────────────────────────
 function parseNLP(raw){
-  var text=raw,lower=raw.toLowerCase();
+  // Replace punctuation separators (comma, dash, pipe, semicolon, slash) with spaces
+  // but only when surrounded by spaces or at word boundaries, so they act as field delimiters
+  var text=raw.replace(/\s*[,\-|;\/]\s*/g,' ').trim();
+  var lower=text.toLowerCase();
   var type='soft',deadline=null,repeat=null;
   if(/\bhard\b/.test(lower)){type='hard';text=text.replace(/\bhard\b/gi,'');}
   else if(/\b(long.?term|someday|eventually|one day|no rush|whenever)\b/.test(lower)){type='longterm';text=text.replace(/\b(long.?term|someday|eventually|one day|no rush|whenever)\b/gi,'');}
@@ -464,7 +525,7 @@ function parseNLP(raw){
     if(!deadline){var inm=lc.match(/\bin\s+(\d+)\s+days?\b/i);if(inm){deadline=offsetDay(parseInt(inm[1]));text=text.replace(/in\s+\d+\s+days?/gi,'');}}
     if(!deadline){var mdm=lc.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(st|nd|rd|th)?\b/i);if(!mdm)mdm=lc.match(/\b(\d{1,2})(st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b/i);if(mdm){var mi,dd2;if(mn.indexOf(mdm[1].toLowerCase())>=0){mi=mn.indexOf(mdm[1].toLowerCase());dd2=parseInt(mdm[2]);}else{mi=mn.indexOf(mdm[3].toLowerCase());dd2=parseInt(mdm[1]);}var dy=TODAY.getFullYear();var dd3=new Date(dy,mi,dd2);if(dd3<TODAY)dd3.setFullYear(dy+1);deadline=dd3;text=text.replace(mdm[0],'');}}
   }
-  var title=text.replace(/\s+/g,' ').replace(/,\s*$/,'').trim();
+  var title=text.replace(/\s+/g,' ').replace(/^[\s,\-|;\/]+|[\s,\-|;\/]+$/g,'').trim();
   if(!title)title='Untitled task';
   return{title:title,deadline:deadline,type:type,repeat:repeat};
 }
@@ -502,9 +563,44 @@ function taskHTML(t){
     +'<div class="task-check'+(t.done?' checked':'')+'" onclick="toggleTask(\''+t.id+'\')">'+( t.done?'&#10003;':'')+'</div>'
     +'<span class="task-title">'+escHtml(t.title)+'</span>'
     +'<span class="task-meta"><span class="tag tag-'+t.type+'">'+t.type+'</span>'+rep+deadlineBadge(t)
+    +'<button class="del-btn" onclick="openEditModal(\''+t.id+'\')" title="edit" style="color:#aaa">&#9998;</button>'
     +'<button class="del-btn" onclick="deleteTask(\''+t.id+'\')">&#10005;</button></span>'
     +'</div>';
 }
+var editingTaskId=null;
+function openEditModal(id){
+  var t=tasks.find(function(x){return x.id===id;});if(!t)return;
+  editingTaskId=id;
+  document.getElementById('edit-title').value=t.title;
+  document.getElementById('edit-type').value=t.type;
+  document.getElementById('edit-repeat').value=t.repeat||'';
+  var dlWrap=document.getElementById('edit-deadline-wrap');
+  dlWrap.style.display=t.type==='longterm'?'none':'';
+  document.getElementById('edit-deadline').value=t.deadline?t.deadline.toISOString().split('T')[0]:'';
+  document.getElementById('edit-modal').style.display='flex';
+  document.getElementById('edit-title').focus();
+  // hide deadline field when longterm selected
+  document.getElementById('edit-type').onchange=function(){
+    dlWrap.style.display=this.value==='longterm'?'none':'';
+  };
+}
+function closeEditModal(){
+  document.getElementById('edit-modal').style.display='none';
+  editingTaskId=null;
+}
+async function saveEdit(){
+  var t=tasks.find(function(x){return x.id===editingTaskId;});if(!t)return;
+  t.title=document.getElementById('edit-title').value.trim()||t.title;
+  t.type=document.getElementById('edit-type').value;
+  t.repeat=document.getElementById('edit-repeat').value||null;
+  var dlVal=document.getElementById('edit-deadline').value;
+  t.deadline=dlVal?parseLocalDate(dlVal):null;
+  if(t.type==='longterm')t.deadline=null;
+  closeEditModal();
+  renderAll();
+  await updateTask(t);
+}
+
 async function toggleTask(id){
   var t=tasks.find(function(x){return x.id===id;});if(!t)return;
   if(t.repeat&&!t.done){var d=t.deadline?new Date(t.deadline):new Date(TODAY);if(t.repeat==='daily')d.setDate(d.getDate()+1);else if(t.repeat==='weekly'||t.repeat.indexOf('every ')===0)d.setDate(d.getDate()+7);else if(t.repeat==='monthly')d.setMonth(d.getMonth()+1);else if(t.repeat==='yearly')d.setFullYear(d.getFullYear()+1);t.deadline=d;}
