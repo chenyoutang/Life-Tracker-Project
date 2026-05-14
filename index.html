@@ -1186,7 +1186,7 @@ function renderNode(node, level){
   if(reg&&paused) streakBadge='<span class="reg-status paused" onclick="setNodeHidden(\''+node.id+'\',false)" title="click to unpause">paused</span>';
   else if(reg&&notStarted) streakBadge='<span class="reg-status" style="background:#FAEEDA;color:#854F0B;cursor:default">not started</span>';
   else if(reg) streakBadge='<span class="reg-status active" onclick="setNodeHidden(\''+node.id+'\',true)" title="click to pause">active</span>';
-  if(reg&&soft&&!paused) streakBadge+='<span style="font-size:10px;background:#E1F5EE;color:#0F6E56;padding:1px 5px;border-radius:4px;margin-left:2px">soft</span>';
+  if(reg&&soft&&!paused) streakBadge+='<span style="font-size:10px;background:#E1F5EE;color:#0F6E56;padding:1px 5px;border-radius:4px;margin-left:2px">situational</span>';
   if(reg&&streak>1&&!notStarted) streakBadge+='<span style="font-size:10px;color:'+(paused?'#ccc':'#5DCAA5')+';margin-left:3px">'+streak+'d</span>';
 
   // ── label style ──
@@ -1205,14 +1205,12 @@ function renderNode(node, level){
   // ── options menu ──
   var menuHtml='';
   if(reg){
-    var softToggleLabel=soft?'&#128274; set strict':'&#129490; set soft';
-    var startedToggleLabel=notStarted?'&#9654; mark as started':'&#9646; set not started yet';
+    var softToggleLabel=soft?'&#128274; set strict':'&#129490; set situational';
     menuHtml='<div class="node-opts-wrap">'
       +'<button class="opts-btn" onclick="toggleMenu(\''+node.id+'\',event)">&#8943;</button>'
       +'<div class="node-opts-menu'+(menuOpen?' open':'')+'" id="menu-'+node.id+'">'
       +'<button onclick="openSchedModal(\''+node.id+'\');closeMenu()">&#128197; schedule</button>'
       +'<button onclick="toggleStrictness(\''+node.id+'\');closeMenu()">'+softToggleLabel+'</button>'
-      +'<button onclick="toggleStarted(\''+node.id+'\');closeMenu()">'+startedToggleLabel+'</button>'
       +'<button onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\');closeMenu()">&#9998; rename</button>'
       +'<div class="menu-sep"></div>'
       +'<button onclick="promptDelete(\''+node.id+'\');closeMenu()" style="color:#c0392b">&#128465; delete</button>'
@@ -1292,7 +1290,7 @@ async function unpauseAllRegs(nodeId){
 }
 async function toggleStrictness(id){
   var n=nodes.find(function(x){return x.id===id;});if(!n)return;
-  var newVal=isSoft(n)?'strict':'soft';
+  var newVal=isSoft(n)?'strict':'situational';
   await fetch(api('checklist_nodes?id=eq.'+id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({strictness:newVal})});
   n.strictness=newVal;renderAll();
 }
@@ -1369,7 +1367,7 @@ function getLastLog(nodeId){
   var sorted=logs.filter(function(l){return l.node_id===nodeId;}).sort(function(a,b){return b.date.localeCompare(a.date);});
   return sorted[0]||null;
 }
-function isSoft(node){ return node.strictness==='soft'; }
+function isSoft(node){ return node.strictness==='situational'; }
 function isNotStarted(node){ return node.started===false; }
 function regTimes(node){
   var s=nodeSchedule(node);
@@ -1494,12 +1492,12 @@ function renderCheckin(){
   var schedLbl=scheduleLabel(node);
   var soft=isSoft(node);
   var notStarted=isNotStarted(node);
-  var softBadge=soft?'<span style="font-size:10px;background:#E1F5EE;color:#0F6E56;padding:1px 6px;border-radius:4px;margin-left:4px">soft</span>':'';
+  var softBadge=soft?'<span style="font-size:10px;background:#E1F5EE;color:#0F6E56;padding:1px 6px;border-radius:4px;margin-left:4px">situational</span>':'';
 
   // buttons depend on state
   var btns='';
   if(notStarted){
-    // not started yet — show start button and skip
+    // not started — offer to start or skip entirely
     btns='<button class="ci-btn ci-yes" onclick="startRegulation(\''+node.id+'\')">&#9654; Start tracking</button>'
       +'<button class="ci-btn ci-skip" onclick="checkinSkip()">Later</button>';
   } else {
@@ -1509,6 +1507,11 @@ function renderCheckin(){
       btns+='<button class="ci-btn ci-notyet" onclick="checkinAnswer(\'notyet\')">Not yet</button>';
     }
     btns+='<button class="ci-btn ci-skip" onclick="checkinSkip()">Later</button>';
+    // for every_n_days show "hasn't started" option if no logs exist at all
+    var s=nodeSchedule(node);
+    if(s.type==='every_n_days'&&!logs.find(function(l){return l.node_id===node.id&&l.status==='done';})){
+      btns+='<div style="margin-top:8px;width:100%"><button class="na-btn" style="font-size:11px" onclick="markNotStarted(\''+node.id+'\')">&#9646; Not started yet — pause tracking</button></div>';
+    }
   }
 
   wrap.innerHTML='<div class="checkin-card">'
@@ -1541,11 +1544,17 @@ function checkinSkip(){
   renderCheckin();
 }
 async function startRegulation(nodeId){
-  // mark as started
   await fetch(api('checklist_nodes?id=eq.'+nodeId),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({started:true})});
   var n=nodes.find(function(x){return x.id===nodeId;});
   if(n)n.started=true;
-  // advance in queue
+  checkinIdx++;
+  renderCheckin();
+  renderTree();
+}
+async function markNotStarted(nodeId){
+  await fetch(api('checklist_nodes?id=eq.'+nodeId),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({started:false})});
+  var n=nodes.find(function(x){return x.id===nodeId;});
+  if(n)n.started=false;
   checkinIdx++;
   renderCheckin();
   renderTree();
