@@ -96,7 +96,49 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 .hint{font-size:11px;color:#aaa;margin-bottom:.6rem;line-height:1.7}
 .hint code{background:#f0f0f0;padding:1px 4px;border-radius:3px;font-size:10px;color:#666}
 
-/* calendar */
+/* calendar events */
+.ev-blue{background:#E6F1FB;color:#185FA5}
+.ev-green{background:#EAF3DE;color:#3B6D11}
+.ev-red{background:#FCEBEB;color:#A32D2D}
+.ev-amber{background:#FAEEDA;color:#854F0B}
+.ev-purple{background:#EEEDFE;color:#534AB7}
+.ev-teal{background:#E1F5EE;color:#0F6E56}
+.ev-pink{background:#FBEAF0;color:#99355A}
+.ev-gray{background:#F1EFE8;color:#5F5E5A}
+.cal-event{font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 3px;border-radius:3px;margin-bottom:1px;line-height:1.4;cursor:pointer}
+.cal-event:hover{opacity:.8}
+
+/* day view */
+.day-timeline{position:relative;overflow-y:auto;max-height:600px}
+.day-hour-row{display:flex;min-height:48px;border-bottom:1px solid #f5f5f5}
+.day-hour-label{width:44px;flex-shrink:0;font-size:10px;color:#bbb;padding:3px 6px 0 0;text-align:right}
+.day-hour-content{flex:1;position:relative;border-left:1px solid #f0f0f0;padding:1px 3px}
+.day-event-block{border-radius:4px;padding:2px 5px;font-size:11px;cursor:pointer;margin-bottom:2px;line-height:1.4}
+.day-event-block:hover{opacity:.85}
+.day-task-chip{background:#f5f5f5;color:#666;border-radius:4px;padding:2px 5px;font-size:11px;margin-bottom:2px;line-height:1.4}
+
+/* agenda view */
+.agenda-group{margin-bottom:1rem}
+.agenda-date-header{font-size:12px;font-weight:600;color:#555;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid #eee}
+.agenda-item{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:7px;margin-bottom:4px;cursor:pointer}
+.agenda-item:hover{background:#f9f9f9}
+.agenda-time{font-size:11px;color:#aaa;width:70px;flex-shrink:0;padding-top:1px}
+.agenda-title{font-size:13px;flex:1;font-weight:500}
+.agenda-sub{font-size:11px;color:#aaa;margin-top:1px}
+.agenda-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
+
+/* cal mode toggle */
+.cal-mode-row{display:flex;gap:5px;margin-bottom:.75rem;flex-wrap:wrap}
+.cal-mode-btn{padding:4px 12px;border:1px solid #ddd;border-radius:20px;font-size:12px;cursor:pointer;background:#fff;color:#666;font-family:inherit}
+.cal-mode-btn.active{background:#f0f0f0;color:#111;border-color:#bbb;font-weight:500}
+
+/* quick nlp bar in calendar */
+.cal-nlp-row{display:flex;gap:6px;margin-bottom:.75rem}
+.cal-nlp-input{flex:1;font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:8px;font-family:inherit;background:#fff}
+.cal-nlp-input:focus{outline:none;border-color:#888}
+.color-picker{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+.color-swatch{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent}
+.color-swatch.selected{border-color:#111}
 .cal-header{display:flex;align-items:center;gap:8px;margin-bottom:.75rem}
 .cal-nav{background:#fff;border:1px solid #ddd;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:15px}
 .cal-nav:hover{background:#f5f5f5}
@@ -245,13 +287,27 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 
   <!-- CALENDAR TAB -->
   <div id="tab-calendar" style="display:none">
+    <div class="cal-nlp-row">
+      <input class="cal-nlp-input" id="cal-nlp-in" placeholder="quick add event: dentist Friday 2pm-3pm or team lunch tomorrow noon" onkeydown="if(event.key==='Enter')addEventFromNLP()"/>
+      <button class="nlp-btn" onclick="addEventFromNLP()">add &#8629;</button>
+    </div>
+    <div class="cal-mode-row">
+      <button class="cal-mode-btn active" id="cmode-both" onclick="setCalMode('both')">events + tasks</button>
+      <button class="cal-mode-btn" id="cmode-events" onclick="setCalMode('events')">events only</button>
+      <button class="cal-mode-btn" id="cmode-tasks" onclick="setCalMode('tasks')">tasks only</button>
+    </div>
     <div class="cal-header">
       <button class="cal-nav" onclick="calNav(-1)">&#8249;</button>
       <span class="cal-title" id="cal-title"></span>
       <button class="cal-nav" onclick="calNav(1)">&#8250;</button>
-      <div class="view-toggle">
-        <button class="active" id="btn-month" onclick="setCalView('month')">month</button>
-        <button id="btn-week" onclick="setCalView('week')">week</button>
+      <div style="display:flex;gap:4px">
+        <div class="view-toggle">
+          <button class="active" id="btn-month" onclick="setCalView('month')">month</button>
+          <button id="btn-week" onclick="setCalView('week')">week</button>
+          <button id="btn-day" onclick="setCalView('day')">day</button>
+          <button id="btn-agenda" onclick="setCalView('agenda')">agenda</button>
+        </div>
+        <button class="na-btn" style="padding:4px 10px;font-size:12px" onclick="openEventModal(null,null)">+ event</button>
       </div>
     </div>
     <div id="cal-body"></div>
@@ -375,6 +431,69 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
   </div>
 </div>
 
+<!-- EVENT MODAL -->
+<div class="modal-backdrop" id="event-modal" style="display:none" onclick="if(event.target===this)closeEventModal()">
+  <div class="modal" style="max-width:480px">
+    <h3 id="event-modal-title">New event</h3>
+    <div class="modal-field">
+      <label>Title</label>
+      <input type="text" id="ev-title" placeholder="Event title"/>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="modal-field">
+        <label>Date</label>
+        <input type="date" id="ev-date"/>
+      </div>
+      <div class="modal-field">
+        <label>Color</label>
+        <div class="color-picker" id="ev-color-picker">
+          <div class="color-swatch selected" data-c="blue" style="background:#378ADD" onclick="selectColor('blue')"></div>
+          <div class="color-swatch" data-c="green" style="background:#639922" onclick="selectColor('green')"></div>
+          <div class="color-swatch" data-c="red" style="background:#E24B4A" onclick="selectColor('red')"></div>
+          <div class="color-swatch" data-c="amber" style="background:#EF9F27" onclick="selectColor('amber')"></div>
+          <div class="color-swatch" data-c="purple" style="background:#7F77DD" onclick="selectColor('purple')"></div>
+          <div class="color-swatch" data-c="teal" style="background:#1D9E75" onclick="selectColor('teal')"></div>
+          <div class="color-swatch" data-c="pink" style="background:#D4537E" onclick="selectColor('pink')"></div>
+          <div class="color-swatch" data-c="gray" style="background:#888780" onclick="selectColor('gray')"></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="modal-field">
+        <label>Start time</label>
+        <input type="time" id="ev-start"/>
+      </div>
+      <div class="modal-field">
+        <label>End time</label>
+        <input type="time" id="ev-end"/>
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>Location</label>
+      <input type="text" id="ev-location" placeholder="Optional location"/>
+    </div>
+    <div class="modal-field">
+      <label>Notes</label>
+      <input type="text" id="ev-notes" placeholder="Optional notes"/>
+    </div>
+    <div class="modal-field">
+      <label>Repeat</label>
+      <select id="ev-repeat">
+        <option value="">no repeat</option>
+        <option value="daily">daily</option>
+        <option value="weekly">weekly</option>
+        <option value="monthly">monthly</option>
+        <option value="yearly">yearly</option>
+      </select>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn" id="ev-delete-btn" style="display:none;color:#c0392b;margin-right:auto" onclick="deleteEventFromModal()">delete</button>
+      <button class="modal-btn" onclick="closeEventModal()">cancel</button>
+      <button class="modal-btn primary" onclick="saveEvent()">save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Config ────────────────────────────────────────────────────────
 var SB_URL = 'https://esmnnedyfdjquvirarwr.supabase.co';
@@ -384,8 +503,8 @@ function api(path){return SB_URL+'/rest/v1/'+path;}
 
 // ── State ─────────────────────────────────────────────────────────
 var TODAY=new Date();TODAY.setHours(0,0,0,0);
-var tasks=[], nodes=[], logs=[];
-var calView='month', calOffset=0, listFilter='all';
+var tasks=[], nodes=[], logs=[], events=[];
+var calView='month', calOffset=0, listFilter='all', calMode='both';
 var masterStreak=parseInt(localStorage.getItem('masterStreak')||'21');
 
 // ── Status ────────────────────────────────────────────────────────
@@ -394,7 +513,7 @@ function setStatus(m,e){var el=document.getElementById('status-bar');el.textCont
 // ── Boot ──────────────────────────────────────────────────────────
 async function boot(){
   setStatus('loading…');
-  await Promise.all([loadTasks(), loadNodes(), loadLogs()]);
+  await Promise.all([loadTasks(), loadNodes(), loadLogs(), loadEvents()]);
   setStatus('');
   renderAll();
 }
@@ -1112,10 +1231,205 @@ function renderStats(){
   document.getElementById('st-todo-done').textContent=done;
 }
 
+// ── Events DB ─────────────────────────────────────────────────────
+async function loadEvents(){
+  var r=await fetch(api('events?order=date.asc,start_time.asc'),{headers:sbHeaders()});
+  if(!r.ok)return;
+  var d=await r.json();
+  events=d.map(dbToEvent);
+}
+function dbToEvent(r){
+  return{id:r.id,title:r.title,date:parseLocalDate(r.date),start_time:r.start_time||null,end_time:r.end_time||null,location:r.location||'',notes:r.notes||'',color:r.color||'blue',repeat:r.repeat||null};
+}
+function eventToDb(e){
+  return{title:e.title,date:e.date.toISOString().split('T')[0],start_time:e.start_time||null,end_time:e.end_time||null,location:e.location||null,notes:e.notes||null,color:e.color||'blue',repeat:e.repeat||null};
+}
+async function createEvent(e){
+  var r=await fetch(api('events'),{method:'POST',headers:sbHeaders(),body:JSON.stringify(eventToDb(e))});
+  if(!r.ok){setStatus('event save error',true);return;}
+  var d=await r.json();var row=Array.isArray(d)?d[0]:d;
+  events.push(dbToEvent(row));renderAll();
+}
+async function updateEvent(e){
+  await fetch(api('events?id=eq.'+e.id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify(eventToDb(e))});
+  var i=events.findIndex(function(x){return x.id===e.id;});
+  if(i>=0)events[i]=e;renderAll();
+}
+async function deleteEventDb(id){
+  await fetch(api('events?id=eq.'+id),{method:'DELETE',headers:sbHeaders()});
+  events=events.filter(function(e){return e.id!==id;});renderAll();
+}
+
+// ── Event helpers ─────────────────────────────────────────────────
+var EVENT_COLORS=['blue','green','red','amber','purple','teal','pink','gray'];
+var selectedColor='blue';
+function selectColor(c){
+  selectedColor=c;
+  document.querySelectorAll('.color-swatch').forEach(function(s){s.classList.toggle('selected',s.dataset.c===c);});
+}
+function eventsOnDate(date){
+  return events.filter(function(e){
+    if(!e.repeat)return sameDay(e.date,date);
+    return eventRepeatOnDate(e,date);
+  }).sort(function(a,b){return(a.start_time||'00:00').localeCompare(b.start_time||'00:00');});
+}
+function eventRepeatOnDate(e,date){
+  if(!e.repeat)return sameDay(e.date,date);
+  var d=new Date(e.date),safety=0;
+  // walk forward
+  while(d<=date&&safety<500){
+    if(sameDay(d,date))return true;
+    if(e.repeat==='daily')d.setDate(d.getDate()+1);
+    else if(e.repeat==='weekly')d.setDate(d.getDate()+7);
+    else if(e.repeat==='monthly')d.setMonth(d.getMonth()+1);
+    else if(e.repeat==='yearly')d.setFullYear(d.getFullYear()+1);
+    else break;safety++;
+  }
+  return false;
+}
+function fmtTime(t){
+  if(!t)return'';
+  var p=t.split(':');var h=parseInt(p[0]),m=p[1];
+  var ampm=h>=12?'pm':'am';h=h%12||12;
+  return h+(m==='00'?'':':'+m)+ampm;
+}
+
+// ── Event NLP ─────────────────────────────────────────────────────
+function parseEventNLP(raw){
+  var text=raw.replace(/\s*[,|;]\s*/g,' ').trim();
+  var lower=text.toLowerCase();
+  var date=new Date(TODAY),start_time=null,end_time=null;
+  var dn=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  var mn=['january','february','march','april','may','june','july','august','september','october','november','december'];
+
+  // time parsing: "2pm", "2:30pm", "14:00", "2pm-3pm", "2-3pm"
+  var timeRangeRe=/\b(\d{1,2}(?::\d{2})?)\s*(am|pm)?\s*[-–]\s*(\d{1,2}(?::\d{2})?)\s*(am|pm)\b/i;
+  var trm=lower.match(timeRangeRe);
+  if(trm){
+    start_time=parseTime(trm[1],trm[2]||trm[4]);
+    end_time=parseTime(trm[3],trm[4]);
+    text=text.replace(timeRangeRe,'').trim();
+  } else {
+    var singleTimeRe=/\b(\d{1,2}(?::\d{2})?)\s*(am|pm)\b/gi;
+    var times=[],tm;
+    while((tm=singleTimeRe.exec(lower))!==null)times.push(tm);
+    if(times.length>=2){start_time=parseTime(times[0][1],times[0][2]);end_time=parseTime(times[1][1],times[1][2]);}
+    else if(times.length===1){start_time=parseTime(times[0][1],times[0][2]);}
+    if(times.length)text=text.replace(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/gi,'').trim();
+  }
+
+  // date parsing
+  var lc=text.toLowerCase();
+  if(/\btoday\b/.test(lc)){date=new Date(TODAY);text=text.replace(/\btoday\b/gi,'');}
+  else if(/\btomorrow\b/.test(lc)){date=offsetDay(1);text=text.replace(/\btomorrow\b/gi,'');}
+  else if(/\bnext\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(lc)){
+    var nm=lc.match(/next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i);
+    var nt=dn.indexOf(nm[1].toLowerCase()),nc=TODAY.getDay(),nd=(nt-nc+7)%7||7;
+    date=offsetDay(nd+7);text=text.replace(/next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/gi,'');
+  } else {
+    var wm=lc.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
+    if(wm){var wt=dn.indexOf(wm[1].toLowerCase()),wc=TODAY.getDay(),wd=(wt-wc+7)%7||7;date=offsetDay(wd);text=text.replace(new RegExp('\\b'+wm[1]+'\\b','gi'),'');}
+  }
+  if(!date||sameDay(date,new Date(0))){
+    var mdm=lc.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})\b/i);
+    if(mdm){var mi=mn.indexOf(mdm[1].toLowerCase()),dy=TODAY.getFullYear();var dd=new Date(dy,mi,parseInt(mdm[2]));if(dd<TODAY)dd.setFullYear(dy+1);date=dd;text=text.replace(mdm[0],'');}
+  }
+
+  var title=text.replace(/\s+/g,' ').replace(/^[\s,]+|[\s,]+$/g,'').trim()||'New event';
+  return{title:title,date:date,start_time:start_time,end_time:end_time,color:'blue',location:'',notes:'',repeat:null};
+}
+function parseTime(hstr,ampm){
+  var p=hstr.split(':'),h=parseInt(p[0]),m=p[1]?parseInt(p[1]):0;
+  if(ampm){ampm=ampm.toLowerCase();if(ampm==='pm'&&h!==12)h+=12;if(ampm==='am'&&h===12)h=0;}
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+}
+function addEventFromNLP(){
+  var v=document.getElementById('cal-nlp-in').value.trim();
+  if(!v)return;
+  var e=parseEventNLP(v);
+  document.getElementById('cal-nlp-in').value='';
+  createEvent(e);
+}
+
+// ── Event modal ───────────────────────────────────────────────────
+var editingEventId=null;
+function openEventModal(id,prefillDate){
+  editingEventId=id;
+  var isNew=!id;
+  document.getElementById('event-modal-title').textContent=isNew?'New event':'Edit event';
+  document.getElementById('ev-delete-btn').style.display=isNew?'none':'';
+  if(isNew){
+    var d=prefillDate||TODAY;
+    document.getElementById('ev-title').value='';
+    document.getElementById('ev-date').value=d.toISOString().split('T')[0];
+    document.getElementById('ev-start').value='';
+    document.getElementById('ev-end').value='';
+    document.getElementById('ev-location').value='';
+    document.getElementById('ev-notes').value='';
+    document.getElementById('ev-repeat').value='';
+    selectColor('blue');
+  } else {
+    var e=events.find(function(x){return x.id===id;});if(!e)return;
+    document.getElementById('ev-title').value=e.title;
+    document.getElementById('ev-date').value=e.date.toISOString().split('T')[0];
+    document.getElementById('ev-start').value=e.start_time||'';
+    document.getElementById('ev-end').value=e.end_time||'';
+    document.getElementById('ev-location').value=e.location||'';
+    document.getElementById('ev-notes').value=e.notes||'';
+    document.getElementById('ev-repeat').value=e.repeat||'';
+    selectColor(e.color||'blue');
+  }
+  document.getElementById('event-modal').style.display='flex';
+  document.getElementById('ev-title').focus();
+}
+function closeEventModal(){document.getElementById('event-modal').style.display='none';editingEventId=null;}
+async function saveEvent(){
+  var title=document.getElementById('ev-title').value.trim();
+  if(!title)return;
+  var dateVal=document.getElementById('ev-date').value;
+  if(!dateVal)return;
+  var e={
+    title:title,
+    date:parseLocalDate(dateVal),
+    start_time:document.getElementById('ev-start').value||null,
+    end_time:document.getElementById('ev-end').value||null,
+    location:document.getElementById('ev-location').value.trim(),
+    notes:document.getElementById('ev-notes').value.trim(),
+    color:selectedColor,
+    repeat:document.getElementById('ev-repeat').value||null
+  };
+  closeEventModal();
+  if(editingEventId){e.id=editingEventId;await updateEvent(e);}
+  else await createEvent(e);
+}
+async function deleteEventFromModal(){
+  if(!editingEventId)return;
+  if(!confirm('Delete this event?'))return;
+  var id=editingEventId;
+  closeEventModal();
+  await deleteEventDb(id);
+}
+
+// ── Calendar mode ─────────────────────────────────────────────────
+function setCalMode(m){
+  calMode=m;
+  ['both','events','tasks'].forEach(function(x){document.getElementById('cmode-'+x).classList.toggle('active',x===m);});
+  renderCal();
+}
+
 // ── Calendar ──────────────────────────────────────────────────────
-function setCalView(v){calView=v;calOffset=0;document.getElementById('btn-month').classList.toggle('active',v==='month');document.getElementById('btn-week').classList.toggle('active',v==='week');renderCal();}
+function setCalView(v){
+  calView=v;calOffset=0;
+  ['month','week','day','agenda'].forEach(function(x){var el=document.getElementById('btn-'+x);if(el)el.classList.toggle('active',x===v);});
+  renderCal();
+}
 function calNav(d){calOffset+=d;renderCal();}
-function renderCal(){if(calView==='month')renderMonth();else renderWeek();}
+function renderCal(){
+  if(calView==='month')renderMonth();
+  else if(calView==='week')renderWeek();
+  else if(calView==='day')renderDay();
+  else renderAgenda();
+}
 function tasksOnDate(date){
   return tasks.filter(function(t){
     if(t.type==='longterm')return false;
@@ -1128,11 +1442,11 @@ function getRepeatOnDate(t,date){
   if(!t.repeat||!t.deadline)return false;
   var d=new Date(t.deadline),safety=0;
   while(d<=date&&safety<500){if(sameDay(d,date))return true;if(t.repeat==='daily')d.setDate(d.getDate()+1);else if(t.repeat==='weekly'||t.repeat.indexOf('every ')===0)d.setDate(d.getDate()+7);else if(t.repeat==='monthly')d.setMonth(d.getMonth()+1);else if(t.repeat==='yearly')d.setFullYear(d.getFullYear()+1);else break;safety++;}
-  // also walk backward
   d=new Date(t.deadline);safety=0;
   while(d>=date&&safety<500){if(sameDay(d,date))return true;if(t.repeat==='daily')d.setDate(d.getDate()-1);else if(t.repeat==='weekly'||t.repeat.indexOf('every ')===0)d.setDate(d.getDate()-7);else if(t.repeat==='monthly')d.setMonth(d.getMonth()-1);else if(t.repeat==='yearly')d.setFullYear(d.getFullYear()-1);else break;safety++;}
   return false;
 }
+
 function renderMonth(){
   var ref=new Date(TODAY.getFullYear(),TODAY.getMonth()+calOffset,1);
   document.getElementById('cal-title').textContent=ref.toLocaleDateString('en-US',{month:'long',year:'numeric'});
@@ -1141,16 +1455,118 @@ function renderMonth(){
   var first=new Date(ref.getFullYear(),ref.getMonth(),1).getDay();
   var last=new Date(ref.getFullYear(),ref.getMonth()+1,0).getDate();
   for(var i=0;i<first;i++){var pd=new Date(ref.getFullYear(),ref.getMonth(),i-first+1);html+='<div class="day-cell other-month"><div class="day-num">'+pd.getDate()+'</div></div>';}
-  for(var d2=1;d2<=last;d2++){var date=new Date(ref.getFullYear(),ref.getMonth(),d2);var iT=sameDay(date,TODAY);var dt=tasksOnDate(date);var dots=dt.slice(0,3).map(function(t){return'<div class="cal-dot dot-'+t.type+'">'+(t.repeat?'&#8635; ':'')+escHtml(t.title)+'</div>';}).join('');html+='<div class="day-cell'+(iT?' today-cell':'')+'"><div class="day-num">'+d2+'</div>'+dots+'</div>';}
+  for(var d=1;d<=last;d++){
+    var date=new Date(ref.getFullYear(),ref.getMonth(),d);
+    var iT=sameDay(date,TODAY);
+    var ds=date.toISOString().split('T')[0];
+    var evs=calMode!=='tasks'?eventsOnDate(date):[];
+    var tks=calMode!=='events'?tasksOnDate(date):[];
+    var dots='';
+    evs.slice(0,3).forEach(function(e){dots+='<div class="cal-event ev-'+e.color+'" onclick="openEventModal(\''+e.id+'\',null);event.stopPropagation()">'+(e.start_time?fmtTime(e.start_time)+' ':'')+escHtml(e.title)+'</div>';});
+    tks.slice(0,Math.max(0,3-evs.length)).forEach(function(t){dots+='<div class="cal-dot dot-'+t.type+'">'+escHtml(t.title)+'</div>';});
+    html+='<div class="day-cell'+(iT?' today-cell':'')+'" onclick="setCalView(\'day\');calOffset=Math.round((new Date(\''+ds+'\')-new Date(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate()))/86400000);renderCal()"><div class="day-num">'+d+'</div>'+dots+'</div>';
+  }
   document.getElementById('cal-body').innerHTML='<div class="month-grid">'+html+'</div>';
 }
+
 function renderWeek(){
   var sw=new Date(TODAY);sw.setDate(TODAY.getDate()-TODAY.getDay()+calOffset*7);
   var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  var cols=days.map(function(name,i){var date=new Date(sw);date.setDate(sw.getDate()+i);var iT=sameDay(date,TODAY);var dt=tasksOnDate(date);var items=dt.map(function(t){return'<div class="week-task dot-'+t.type+'">'+(t.repeat?'&#8635; ':'')+escHtml(t.title)+'</div>';}).join('');return'<div class="week-col'+(iT?' today-col':'')+'"><div class="week-col-header">'+name+'<span class="wday-num">'+date.getDate()+'</span></div>'+items+'</div>';}).join('');
+  var cols=days.map(function(name,i){
+    var date=new Date(sw);date.setDate(sw.getDate()+i);
+    var iT=sameDay(date,TODAY);
+    var evs=calMode!=='tasks'?eventsOnDate(date):[];
+    var tks=calMode!=='events'?tasksOnDate(date):[];
+    var items='';
+    evs.forEach(function(e){items+='<div class="week-task ev-'+e.color+'" onclick="openEventModal(\''+e.id+'\',null)" style="cursor:pointer">'+(e.start_time?fmtTime(e.start_time)+' ':'')+escHtml(e.title)+'</div>';});
+    tks.forEach(function(t){items+='<div class="week-task dot-'+t.type+'">'+escHtml(t.title)+'</div>';});
+    return'<div class="week-col'+(iT?' today-col':(sameDay(date,TODAY)?'':' '))+'" onclick="setCalView(\'day\');calOffset=Math.round((date-TODAY)/86400000);renderCal()">'
+      +'<div class="week-col-header">'+name+'<span class="wday-num">'+date.getDate()+'</span></div>'
+      +items+'</div>';
+  }).join('');
   var end=new Date(sw.getTime()+6*86400000);
   document.getElementById('cal-title').textContent=sw.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' \u2013 '+end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   document.getElementById('cal-body').innerHTML='<div class="week-grid">'+cols+'</div>';
+}
+
+function renderDay(){
+  var date=offsetDay(calOffset);
+  document.getElementById('cal-title').textContent=date.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  var evs=calMode!=='tasks'?eventsOnDate(date):[];
+  var tks=calMode!=='events'?tasksOnDate(date):[];
+  var hours=[];
+  for(var h=0;h<24;h++){
+    var hStr=String(h).padStart(2,'0')+':00';
+    var label=h===0?'12am':h<12?h+'am':h===12?'12pm':(h-12)+'pm';
+    var evItems=evs.filter(function(e){return e.start_time&&e.start_time.startsWith(String(h).padStart(2,'0'));});
+    var allDayEvs=h===0?evs.filter(function(e){return !e.start_time;}):[];
+    var tkItems=h===0?tks:[];
+    var content='';
+    allDayEvs.forEach(function(e){content+='<div class="day-event-block ev-'+e.color+'" onclick="openEventModal(\''+e.id+'\',null)">'+escHtml(e.title)+(e.location?' · '+escHtml(e.location):'')+'</div>';});
+    evItems.forEach(function(e){content+='<div class="day-event-block ev-'+e.color+'" onclick="openEventModal(\''+e.id+'\',null)">'+(e.start_time?fmtTime(e.start_time)+(e.end_time?' – '+fmtTime(e.end_time):'')+' ':'')+'<strong>'+escHtml(e.title)+'</strong>'+(e.location?' · '+escHtml(e.location):'')+(e.notes?'<br><span style="font-size:10px;opacity:.7">'+escHtml(e.notes)+'</span>':'')+'</div>';});
+    tkItems.forEach(function(t){content+='<div class="day-task-chip">&#128203; '+escHtml(t.title)+'</div>';});
+    hours.push('<div class="day-hour-row"><div class="day-hour-label">'+label+'</div><div class="day-hour-content">'+content+'</div></div>');
+  }
+  var addBtn='<button class="na-btn" style="margin-bottom:.75rem;padding:6px 14px" onclick="openEventModal(null,offsetDay('+calOffset+'))">+ add event this day</button>';
+  document.getElementById('cal-body').innerHTML=addBtn+'<div class="day-timeline">'+hours.join('')+'</div>';
+  // scroll to 8am
+  setTimeout(function(){var tl=document.querySelector('.day-timeline');if(tl)tl.scrollTop=8*48;},50);
+}
+
+function renderAgenda(){
+  var start=new Date(TODAY);start.setDate(TODAY.getDate()+calOffset*30);
+  var end=new Date(start);end.setDate(start.getDate()+30);
+  document.getElementById('cal-title').textContent='Next 30 days';
+
+  // collect all events and tasks in range
+  var items=[];
+  for(var d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+    var dd=new Date(d);
+    if(calMode!=='tasks'){
+      eventsOnDate(dd).forEach(function(e){items.push({type:'event',date:new Date(dd),obj:e});});
+    }
+    if(calMode!=='events'){
+      tasksOnDate(dd).forEach(function(t){items.push({type:'task',date:new Date(dd),obj:t});});
+    }
+  }
+
+  if(!items.length){document.getElementById('cal-body').innerHTML='<p class="empty-state">nothing in the next 30 days</p>';return;}
+
+  // group by date
+  var groups={},order=[];
+  items.forEach(function(item){
+    var k=item.date.toISOString().split('T')[0];
+    if(!groups[k]){groups[k]=[];order.push(k);}
+    groups[k].push(item);
+  });
+
+  var html=order.map(function(k){
+    var d=parseLocalDate(k);
+    var isT=sameDay(d,TODAY);
+    var dateLabel=isT?'Today — '+d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}):d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    var rows=groups[k].map(function(item){
+      if(item.type==='event'){
+        var e=item.obj;
+        var timeStr=e.start_time?fmtTime(e.start_time)+(e.end_time?' – '+fmtTime(e.end_time):''):'all day';
+        return'<div class="agenda-item" onclick="openEventModal(\''+e.id+'\',null)">'
+          +'<div class="agenda-dot" style="background:var(--ev-'+e.color+',#378ADD)"></div>'
+          +'<div class="agenda-time">'+timeStr+'</div>'
+          +'<div><div class="agenda-title">'+escHtml(e.title)+'</div>'
+          +(e.location?'<div class="agenda-sub">'+escHtml(e.location)+'</div>':'')
+          +'</div></div>';
+      } else {
+        var t=item.obj;
+        return'<div class="agenda-item">'
+          +'<div class="agenda-dot" style="background:#ddd"></div>'
+          +'<div class="agenda-time">task</div>'
+          +'<div><div class="agenda-title">'+escHtml(t.title)+'</div>'
+          +'<div class="agenda-sub">'+t.type+'</div>'
+          +'</div></div>';
+      }
+    }).join('');
+    return'<div class="agenda-group"><div class="agenda-date-header'+(isT?' ' :'')+'" style="'+(isT?'color:#185FA5':'')+'">'+dateLabel+'</div>'+rows+'</div>';
+  }).join('');
+  document.getElementById('cal-body').innerHTML=html;
 }
 
 // ── Render all ────────────────────────────────────────────────────
