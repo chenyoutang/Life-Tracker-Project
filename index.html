@@ -695,7 +695,7 @@ async function authSubmit(){
   document.getElementById('auth-submit-btn').textContent='…';
 
   if(authMode==='reset'){
-    var r=await fetch(AUTH_URL+'/recover',{method:'POST',headers:authHeaders(),body:JSON.stringify({email:email})});
+    var r=await fetch(AUTH_URL+'/recover',{method:'POST',headers:Object.assign(authHeaders(),{'Authorization':'Bearer '+SB_KEY}),body:JSON.stringify({email:email})});
     document.getElementById('auth-submit-btn').textContent='Send reset link';
     if(r.ok){okEl.textContent='Reset link sent — check your email.';okEl.style.display='';}
     else{errEl.textContent='Error sending reset link.';errEl.style.display='';}
@@ -704,10 +704,10 @@ async function authSubmit(){
   if(authMode==='signup'){
     var pw2=document.getElementById('auth-pw2').value;
     if(pw!==pw2){errEl.textContent='Passwords do not match.';errEl.style.display='';document.getElementById('auth-submit-btn').textContent='Create account';return;}
-    var r=await fetch(AUTH_URL+'/signup',{method:'POST',headers:authHeaders(),body:JSON.stringify({email:email,password:pw})});
+    var r=await fetch(AUTH_URL+'/signup',{method:'POST',headers:Object.assign(authHeaders(),{'Authorization':'Bearer '+SB_KEY}),body:JSON.stringify({email:email,password:pw})});
     var d=await r.json();
     document.getElementById('auth-submit-btn').textContent='Create account';
-    if(!r.ok){errEl.textContent=d.msg||d.message||'Signup failed.';errEl.style.display='';return;}
+    if(!r.ok){errEl.textContent=d.msg||d.message||d.error_description||('Error '+r.status);errEl.style.display='';return;}
     if(d.access_token){
       d.expires_at=Math.floor(Date.now()/1000)+d.expires_in;
       localStorage.setItem('sb_session',JSON.stringify(d));
@@ -720,10 +720,10 @@ async function authSubmit(){
     return;
   }
   // login
-  var r=await fetch(AUTH_URL+'/token?grant_type=password',{method:'POST',headers:authHeaders(),body:JSON.stringify({email:email,password:pw})});
+  var r=await fetch(AUTH_URL+'/token?grant_type=password',{method:'POST',headers:Object.assign(authHeaders(),{'Authorization':'Bearer '+SB_KEY}),body:JSON.stringify({email:email,password:pw})});
   var d=await r.json();
   document.getElementById('auth-submit-btn').textContent='Sign in';
-  if(!r.ok){errEl.textContent=d.error_description||d.msg||'Invalid email or password.';errEl.style.display='';return;}
+  if(!r.ok){errEl.textContent=d.error_description||d.msg||d.message||('Error '+r.status);errEl.style.display='';return;}
   d.expires_at=Math.floor(Date.now()/1000)+d.expires_in;
   localStorage.setItem('sb_session',JSON.stringify(d));
   currentUser=d;
