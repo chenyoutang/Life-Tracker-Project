@@ -121,7 +121,7 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 .week-task{font-size:9px;padding:2px 3px;border-radius:3px;margin-bottom:2px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* stats */
-.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:.75rem}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:.75rem}
 .stat-card{background:#fff;border:1px solid #e8e8e8;border-radius:8px;padding:.75rem;text-align:center}
 .stat-num{font-size:24px;font-weight:600;color:#111;line-height:1.1}
 .stat-label{font-size:11px;color:#aaa;margin-top:3px}
@@ -137,6 +137,15 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 
 .empty-state{color:#ccc;font-size:13px;text-align:center;padding:1.25rem 0}
 .longterm-section{margin-top:.75rem}
+.tag-mastered{background:#F1EFE8;color:#5F5E5A}
+.node-hidden .node-label{color:#bbb}
+.node-mastered .node-label{color:#5DCAA5}
+.node-mastered .node-label::after{content:' ★';font-size:10px}
+.settings-panel{background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:1rem;margin-top:1rem}
+.settings-row{display:flex;align-items:center;gap:10px;margin-bottom:.5rem}
+.settings-row label{font-size:13px;color:#555;flex:1}
+.settings-row input[type=number]{width:60px;font-size:14px;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-family:inherit;text-align:center}
+.settings-toggle{margin-top:.5rem;font-size:12px;color:#aaa;cursor:pointer;text-decoration:underline;display:inline-block}
 
 /* edit modal */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:100;display:flex;align-items:center;justify-content:center;padding:1rem}
@@ -175,6 +184,19 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
     </div>
     <div id="checkin-wrap" style="display:none"></div>
     <div id="tree-wrap"></div>
+    <div id="mastered-section" style="display:none;margin-top:1rem">
+      <p class="section-label">mastered (hidden from check-in)</p>
+      <div id="mastered-list"></div>
+    </div>
+    <span class="settings-toggle" onclick="toggleSettings()">&#9881; settings</span>
+    <div class="settings-panel" id="settings-panel" style="display:none">
+      <p class="section-label">check-in settings</p>
+      <div class="settings-row">
+        <label>Auto-hide after consecutive days completed</label>
+        <input type="number" id="setting-n" min="1" max="365" value="21" onchange="saveSettings()" />
+      </div>
+      <p style="font-size:11px;color:#aaa;margin-top:.25rem">Leaf nodes completed this many days in a row will be hidden from daily check-in and counted as mastered in stats.</p>
+    </div>
   </div>
 
   <!-- TASKS TAB -->
@@ -225,6 +247,7 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
       <div class="stat-card"><div class="stat-num" id="st-today">—</div><div class="stat-label">today %</div></div>
       <div class="stat-card"><div class="stat-num" id="st-week">—</div><div class="stat-label">7-day avg</div></div>
       <div class="stat-card"><div class="stat-num" id="st-streak">—</div><div class="stat-label">day streak</div></div>
+      <div class="stat-card" style="border-color:#9FE1CB"><div class="stat-num" id="st-mastered" style="color:#5DCAA5">—</div><div class="stat-label">mastered ★</div></div>
     </div>
     <div class="card">
       <p class="section-label">checklist by area</p>
@@ -298,6 +321,7 @@ var TODAY=new Date();TODAY.setHours(0,0,0,0);
 var tasks=[], nodes=[], logs=[];
 var calView='month', calOffset=0, listFilter='all';
 var checkinQueue=[], checkinIdx=0;
+var masterStreak=parseInt(localStorage.getItem('masterStreak')||'21');
 
 // ── Status ────────────────────────────────────────────────────────
 function setStatus(m,e){var el=document.getElementById('status-bar');el.textContent=m;el.className='status-bar'+(e?' err':'');}
@@ -352,7 +376,7 @@ async function seedDefaultNodes(){
   async function insert(items, parentId, order){
     for(var i=0;i<items.length;i++){
       var item=items[i];
-      var r=await fetch(api('checklist_nodes'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({label:item.label,parent_id:parentId||null,sort_order:i})});
+      var r=await fetch(api('checklist_nodes'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({label:item.label,parent_id:parentId||null,sort_order:i,node_type:'regular',hidden_from_checkin:false})});
       var d=await r.json(); var row=Array.isArray(d)?d[0]:d;
       nodes.push(row);
       if(item.children) await insert(item.children, row.id, 0);
@@ -360,8 +384,9 @@ async function seedDefaultNodes(){
   }
   await insert(tree, null, 0);
 }
-async function addNode(label, parentId, order){
-  var r=await fetch(api('checklist_nodes'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({label:label,parent_id:parentId||null,sort_order:order||0})});
+async function addNode(label, parentId, order, nodeType){
+  var type=nodeType||'regular';
+  var r=await fetch(api('checklist_nodes'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({label:label,parent_id:parentId||null,sort_order:order||0,node_type:type,hidden_from_checkin:false})});
   var d=await r.json(); var row=Array.isArray(d)?d[0]:d;
   nodes.push(row); renderAll();
 }
@@ -373,10 +398,14 @@ async function renameNode(id, label){
   await fetch(api('checklist_nodes?id=eq.'+id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({label:label})});
   var n=nodes.find(function(x){return x.id===id;}); if(n) n.label=label; renderAll();
 }
+async function setNodeHidden(id, hidden){
+  await fetch(api('checklist_nodes?id=eq.'+id),{method:'PATCH',headers:sbHeaders(),body:JSON.stringify({hidden_from_checkin:hidden})});
+  var n=nodes.find(function(x){return x.id===id;}); if(n) n.hidden_from_checkin=hidden; renderAll();
+}
 
 // ── Logs DB ───────────────────────────────────────────────────────
 async function loadLogs(){
-  var since=new Date(TODAY); since.setDate(since.getDate()-30);
+  var since=new Date(TODAY); since.setDate(since.getDate()-400);
   var r=await fetch(api('checklist_logs?date=gte.'+since.toISOString().split('T')[0]+'&order=date.desc'),{headers:sbHeaders()});
   var d=await r.json(); logs=d;
 }
@@ -390,22 +419,56 @@ async function logNode(nodeId, status){
     var r=await fetch(api('checklist_logs'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({node_id:nodeId,date:dateStr,status:status})});
     var d=await r.json(); var row=Array.isArray(d)?d[0]:d; logs.push(row);
   }
-  renderAll();
+  // after logging, check if this node just hit the mastery streak and auto-hide
+  var streak=consecutiveStreak(nodeId);
+  var n=nodes.find(function(x){return x.id===nodeId;});
+  if(n&&!n.hidden_from_checkin&&streak>=masterStreak){
+    await setNodeHidden(nodeId,true);
+  } else {
+    renderAll();
+  }
 }
 function todayLog(nodeId){
   var dateStr=TODAY.toISOString().split('T')[0];
   return logs.find(function(l){return l.node_id===nodeId&&l.date===dateStr;})||null;
+}
+// count how many consecutive days ending yesterday (or today if done) this node was done
+function consecutiveStreak(nodeId){
+  var streak=0;
+  for(var i=0;i<400;i++){
+    var d=new Date(TODAY);d.setDate(d.getDate()-i);
+    var ds=d.toISOString().split('T')[0];
+    var l=logs.find(function(x){return x.node_id===nodeId&&x.date===ds;});
+    if(l&&l.status==='done') streak++;
+    else break;
+  }
+  return streak;
+}
+function isMastered(nodeId){
+  var n=nodes.find(function(x){return x.id===nodeId;});
+  return n&&n.hidden_from_checkin;
 }
 
 // ── Tree helpers ──────────────────────────────────────────────────
 function childrenOf(parentId){
   return nodes.filter(function(n){return n.parent_id===parentId;}).sort(function(a,b){return a.sort_order-b.sort_order;});
 }
-function leafNodes(){
-  var ids=nodes.map(function(n){return n.id;});
-  var parentIds={};
-  nodes.forEach(function(n){if(n.parent_id)parentIds[n.parent_id]=true;});
-  return nodes.filter(function(n){return !parentIds[n.id];});
+function isLeaf(nodeId){
+  return childrenOf(nodeId).length===0;
+}
+function isRegulation(nodeId){
+  var n=nodes.find(function(x){return x.id===nodeId;});
+  return n&&n.node_type==='regulation';
+}
+function checkableLeaves(){
+  // only actual leaves (no children) that are not hidden
+  return nodes.filter(function(n){return isLeaf(n.id)&&!n.hidden_from_checkin;});
+}
+function allLeaves(){
+  return nodes.filter(function(n){return isLeaf(n.id);});
+}
+function masteredLeaves(){
+  return nodes.filter(function(n){return isLeaf(n.id)&&n.hidden_from_checkin;});
 }
 function ancestorLabels(nodeId){
   var labels=[];
@@ -420,25 +483,70 @@ function renderTree(){
   var wrap=document.getElementById('tree-wrap');
   var roots=childrenOf(null);
   wrap.innerHTML=roots.map(function(n){return renderNode(n,0);}).join('');
+  // mastered section
+  var mastered=masteredLeaves();
+  var ms=document.getElementById('mastered-section');
+  var ml=document.getElementById('mastered-list');
+  if(mastered.length){
+    ms.style.display='';
+    ml.innerHTML=mastered.map(function(n){
+      var streak=consecutiveStreak(n.id);
+      return'<div style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;background:#f9f9f9;margin-bottom:4px">'
+        +'<span style="font-size:13px;color:#5DCAA5">★</span>'
+        +'<span style="flex:1;font-size:13px;color:#888">'+escHtml(ancestorLabels(n.id)?ancestorLabels(n.id)+' › '+n.label:n.label)+'</span>'
+        +'<span style="font-size:11px;color:#aaa">'+streak+'d streak</span>'
+        +'<button class="na-btn" onclick="setNodeHidden(\''+n.id+'\',false)" title="bring back to check-in">↩ restore</button>'
+        +'</div>';
+    }).join('');
+  } else ms.style.display='none';
 }
 function renderNode(node, level){
   var children=childrenOf(node.id);
   var hasChildren=children.length>0;
   var isExp=expanded[node.id]!==false;
-  var log=todayLog(node.id);
+  var leaf=isLeaf(node.id);
+  var regulation=isRegulation(node.id);
+  var log=leaf?todayLog(node.id):null;
   var checkCls=log?(log.status==='done'?'done':'skip'):'';
   var checkIcon=log?(log.status==='done'?'&#10003;':'&#8212;'):'';
-  var toggle=hasChildren?('<span class="node-toggle" onclick="toggleNode(\''+node.id+'\')" style="cursor:pointer">'+(isExp?'&#9660;':'&#9654;')+'</span>'):'<span class="node-toggle"></span>';
+  var toggle=hasChildren
+    ?('<span class="node-toggle" onclick="toggleNode(\''+node.id+'\')" style="cursor:pointer">'+(isExp?'&#9660;':'&#9654;')+'</span>')
+    :'<span class="node-toggle"></span>';
+
+  // checkbox only for leaves
+  var checkBox=leaf
+    ?'<div class="node-check '+checkCls+'" onclick="cycleLog(\''+node.id+'\')" title="done / skip / clear">'+checkIcon+'</div>'
+    :'<div style="width:17px;flex-shrink:0"></div>';
+
+  // actions differ by node type
+  var actions='';
+  if(regulation){
+    // regulation: rename and delete only
+    actions='<button class="na-btn" onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\')">rename</button>'
+      +'<button class="na-btn" onclick="promptDelete(\''+node.id+'\')">del</button>';
+  } else if(leaf){
+    // leaf (not regulation): +regulation, hide, rename, delete
+    actions='<button class="na-btn" onclick="promptAddRegulation(\''+node.id+'\')">+regulation</button>'
+      +'<button class="na-btn" onclick="promptHide(\''+node.id+'\')" title="hide from daily check-in">hide</button>'
+      +'<button class="na-btn" onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\')">rename</button>'
+      +'<button class="na-btn" onclick="promptDelete(\''+node.id+'\')">del</button>';
+  } else {
+    // parent node: +child, rename, delete
+    actions='<button class="na-btn" onclick="promptAddChild(\''+node.id+'\')">+child</button>'
+      +'<button class="na-btn" onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\')">rename</button>'
+      +'<button class="na-btn" onclick="promptDelete(\''+node.id+'\')">del</button>';
+  }
+
+  var streak=leaf?consecutiveStreak(node.id):0;
+  var streakBadge=leaf&&streak>0?'<span style="font-size:10px;color:#aaa;margin-left:4px">'+streak+'d</span>':'';
+
   var html='<div class="tree-node" id="tn-'+node.id+'">'
     +'<div class="node-row">'
     +toggle
-    +'<div class="node-check '+checkCls+'" onclick="cycleLog(\''+node.id+'\')" title="toggle done/skip/clear">'+checkIcon+'</div>'
-    +'<span class="node-label l'+Math.min(level,2)+'">'+escHtml(node.label)+'</span>'
-    +'<span class="node-actions">'
-    +'<button class="na-btn" onclick="promptAddChild(\''+node.id+'\')">+child</button>'
-    +'<button class="na-btn" onclick="promptRename(\''+node.id+'\',\''+escAttr(node.label)+'\')">rename</button>'
-    +'<button class="na-btn" onclick="promptDelete(\''+node.id+'\')">del</button>'
-    +'</span>'
+    +checkBox
+    +'<span class="node-label l'+Math.min(level,2)+'"'+(regulation?' style="font-style:italic;color:#888"':'')+'>'+escHtml(node.label)+'</span>'
+    +streakBadge
+    +'<span class="node-actions">'+actions+'</span>'
     +'</div>';
   if(hasChildren&&isExp){
     html+='<div class="node-children">'+children.map(function(c){return renderNode(c,level+1);}).join('')+'</div>';
@@ -448,6 +556,7 @@ function renderNode(node, level){
 }
 function toggleNode(id){expanded[id]=expanded[id]===false?true:false;renderTree();}
 function cycleLog(nodeId){
+  if(!isLeaf(nodeId))return; // safety: only leaf nodes
   var log=todayLog(nodeId);
   if(!log) logNode(nodeId,'done');
   else if(log.status==='done') logNode(nodeId,'skip');
@@ -456,14 +565,27 @@ function cycleLog(nodeId){
     logs=logs.filter(function(l){return l.id!==log.id;}); renderAll();
   }
 }
-function promptAddChild(parentId){var l=prompt('New item name:');if(l)addNode(l,parentId,999);}
-function addRootNode(){var l=prompt('New area name:');if(l)addNode(l,null,999);}
+function promptAddChild(parentId){var l=prompt('New item name:');if(l)addNode(l,parentId,999,'regular');}
+function promptAddRegulation(parentId){var l=prompt('Regulation name (e.g. "morning", "before bed"):');if(l)addNode(l,parentId,999,'regulation');}
+function addRootNode(){var l=prompt('New area name:');if(l)addNode(l,null,999,'regular');}
 function promptRename(id,cur){var l=prompt('Rename:',cur);if(l)renameNode(id,l);}
 function promptDelete(id){if(confirm('Delete this item and all its children?'))deleteNode(id);}
+function promptHide(id){if(confirm('Hide from daily check-in? You can restore it from the mastered section below.'))setNodeHidden(id,true);}
+
+// ── Settings ──────────────────────────────────────────────────────
+function toggleSettings(){
+  var p=document.getElementById('settings-panel');
+  p.style.display=p.style.display==='none'?'':'none';
+  if(p.style.display!=='none') document.getElementById('setting-n').value=masterStreak;
+}
+function saveSettings(){
+  var v=parseInt(document.getElementById('setting-n').value);
+  if(v>0){masterStreak=v;localStorage.setItem('masterStreak',v);}
+}
 
 // ── Check-in ──────────────────────────────────────────────────────
 function startCheckin(){
-  var leaves=leafNodes();
+  var leaves=checkableLeaves();
   var dateStr=TODAY.toISOString().split('T')[0];
   checkinQueue=leaves.filter(function(n){
     var l=logs.find(function(x){return x.node_id===n.id&&x.date===dateStr;});
@@ -481,10 +603,11 @@ function renderCheckin(){
   }
   var node=checkinQueue[checkinIdx];
   var pct=Math.round(checkinIdx/checkinQueue.length*100);
+  var streak=consecutiveStreak(node.id);
   wrap.innerHTML='<div class="checkin-card">'
     +'<div class="checkin-prog">'+checkinIdx+' / '+checkinQueue.length+'</div>'
     +'<div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div>'
-    +'<div class="checkin-path">'+ancestorLabels(node.id)+'</div>'
+    +'<div class="checkin-path">'+ancestorLabels(node.id)+(streak>0?' &nbsp;&#183;&nbsp; '+streak+'d streak':'')+'</div>'
     +'<div class="checkin-q">'+escHtml(node.label)+'?</div>'
     +'<div class="checkin-btns">'
     +'<button class="ci-btn ci-yes" onclick="checkinAnswer(\'done\')">&#10003; Done</button>'
@@ -613,19 +736,22 @@ function setFilter(f){listFilter=f;document.querySelectorAll('.filter-btn').forE
 // ── Stats ─────────────────────────────────────────────────────────
 function renderStats(){
   var dateStr=TODAY.toISOString().split('T')[0];
-  var leaves=leafNodes();
+  var active=checkableLeaves();   // not hidden
+  var mastered=masteredLeaves();  // hidden
+  var all=allLeaves();
   var todayLogs=logs.filter(function(l){return l.date===dateStr;});
   var todayDone=todayLogs.filter(function(l){return l.status==='done';}).length;
-  var todayPct=leaves.length?Math.round(todayDone/leaves.length*100):0;
+  // today % counts only active leaves
+  var todayPct=active.length?Math.round(todayDone/active.length*100):0;
   document.getElementById('st-today').textContent=todayPct+'%';
 
-  // 7-day avg
+  // 7-day avg over active leaves
   var total=0,days=0;
   for(var i=1;i<=7;i++){
     var d=new Date(TODAY);d.setDate(d.getDate()-i);
     var ds=d.toISOString().split('T')[0];
     var dl=logs.filter(function(l){return l.date===ds&&l.status==='done';}).length;
-    if(leaves.length){total+=dl/leaves.length;days++;}
+    if(active.length){total+=dl/active.length;days++;}
   }
   document.getElementById('st-week').textContent=days?Math.round(total/days*100)+'%':'—';
 
@@ -639,17 +765,24 @@ function renderStats(){
   }
   document.getElementById('st-streak').textContent=streak;
 
-  // area bars — top-level nodes
+  // mastered count card
+  var mastEl=document.getElementById('st-mastered');
+  if(mastEl)mastEl.textContent=mastered.length;
+
+  // area bars — include mastered as separate category within each area
   var topNodes=childrenOf(null);
   var barsHTML=topNodes.map(function(area){
     function getLeaves(nid){var ch=childrenOf(nid);if(!ch.length)return[nid];var all=[];ch.forEach(function(c){all=all.concat(getLeaves(c.id));});return all;}
     var aLeaves=getLeaves(area.id);
-    var aDone=aLeaves.filter(function(id){var l=todayLogs.find(function(x){return x.node_id===id;});return l&&l.status==='done';}).length;
-    var pct=aLeaves.length?Math.round(aDone/aLeaves.length*100):0;
+    var aActive=aLeaves.filter(function(id){var n=nodes.find(function(x){return x.id===id;});return n&&!n.hidden_from_checkin;});
+    var aMastered=aLeaves.filter(function(id){var n=nodes.find(function(x){return x.id===id;});return n&&n.hidden_from_checkin;});
+    var aDone=aActive.filter(function(id){var l=todayLogs.find(function(x){return x.node_id===id;});return l&&l.status==='done';}).length;
+    var pct=aActive.length?Math.round(aDone/aActive.length*100):0;
+    var mastBadge=aMastered.length?'<span style="font-size:10px;color:#5DCAA5;margin-left:4px">★'+aMastered.length+' mastered</span>':'';
     return'<div class="area-bar-row">'
       +'<div class="area-bar-label">'+escHtml(area.label)+'</div>'
       +'<div class="area-bar-track"><div class="area-bar-fill" style="width:'+pct+'%"></div></div>'
-      +'<div class="area-bar-pct">'+pct+'%</div>'
+      +'<div class="area-bar-pct">'+pct+'%'+mastBadge+'</div>'
       +'</div>';
   }).join('');
   document.getElementById('area-bars').innerHTML=barsHTML||'<p class="empty-state">no data yet</p>';
