@@ -183,9 +183,9 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 .view-toggle button.active{background:#f0f0f0;color:#111;font-weight:500}
 .month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
 .day-header{text-align:center;font-size:10px;color:#aaa;padding:3px 0;font-weight:500}
-.day-cell{min-height:60px;padding:3px;border-radius:5px;border:1px solid transparent}
+.day-cell{min-height:60px;padding:3px;border-radius:5px;border:1px solid #eee;background:#fff}
 .day-cell:hover{background:#f9f9f9}
-.today-cell{border-color:#378ADD!important}
+.today-cell{border-color:#378ADD!important;background:#f5f9ff!important}
 .other-month .day-num{color:#ddd}
 .day-num{font-size:11px;font-weight:500;margin-bottom:2px}
 .cal-dot{font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 3px;border-radius:3px;margin-bottom:1px;line-height:1.4}
@@ -262,8 +262,42 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 <!-- AUTH SCREEN -->
 <div id="auth-screen" style="display:none">
   <div class="auth-screen">
-    <div class="auth-logo">&#127759;</div>
-    <div class="auth-title">Life Tracker</div>
+    <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:1.5rem">
+      <svg width="64" height="64" viewBox="0 0 160 160" style="margin-bottom:.75rem">
+        <circle cx="80" cy="80" r="78" fill="#111"/>
+        <circle cx="80" cy="80" r="71" fill="none" stroke="#fff" stroke-width="1" opacity="0.12"/>
+        <line x1="38" y1="28" x2="38" y2="122" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity="0.9"/>
+        <line x1="70" y1="20" x2="70" y2="122" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity="0.9"/>
+        <line x1="102" y1="20" x2="102" y2="122" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity="0.9"/>
+        <line x1="134" y1="28" x2="134" y2="122" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity="0.9"/>
+        <line x1="28" y1="52" x2="144" y2="52" stroke="#5DCAA5" stroke-width="6" stroke-linecap="round"/>
+        <line x1="28" y1="78" x2="144" y2="78" stroke="#5DCAA5" stroke-width="6" stroke-linecap="round"/>
+        <line x1="28" y1="104" x2="144" y2="104" stroke="#5DCAA5" stroke-width="6" stroke-linecap="round"/>
+        <line x1="38" y1="52" x2="70" y2="78" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="70" y1="52" x2="38" y2="78" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="70" y1="52" x2="102" y2="78" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="102" y1="52" x2="70" y2="78" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="102" y1="52" x2="134" y2="78" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="134" y1="52" x2="102" y2="78" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="38" y1="78" x2="70" y2="104" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="70" y1="78" x2="38" y2="104" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="70" y1="78" x2="102" y2="104" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="102" y1="78" x2="70" y2="104" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="102" y1="78" x2="134" y2="104" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="134" y1="78" x2="102" y2="104" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <circle cx="38" cy="52" r="7" fill="#5DCAA5"/><circle cx="70" cy="52" r="7" fill="#5DCAA5"/>
+        <circle cx="102" cy="52" r="7" fill="#5DCAA5"/><circle cx="134" cy="52" r="7" fill="#5DCAA5"/>
+        <circle cx="38" cy="78" r="7" fill="#5DCAA5"/><circle cx="70" cy="78" r="7" fill="#5DCAA5"/>
+        <circle cx="102" cy="78" r="7" fill="#5DCAA5"/><circle cx="134" cy="78" r="7" fill="#5DCAA5"/>
+        <circle cx="38" cy="104" r="7" fill="#5DCAA5"/><circle cx="70" cy="104" r="7" fill="#5DCAA5"/>
+        <circle cx="102" cy="104" r="7" fill="#5DCAA5"/><circle cx="134" cy="104" r="7" fill="#5DCAA5"/>
+        <circle cx="38" cy="28" r="8" fill="#fff" opacity="0.5"/>
+        <circle cx="70" cy="20" r="8" fill="#fff" opacity="0.5"/>
+        <circle cx="102" cy="20" r="8" fill="#fff" opacity="0.5"/>
+        <circle cx="134" cy="28" r="8" fill="#fff" opacity="0.5"/>
+      </svg>
+      <div class="auth-title">Life<span style="color:#5DCAA5">Tracker</span></div>
+    </div>
     <div class="auth-sub" id="auth-sub">Track your habits, tasks and life.</div>
     <div class="auth-card">
       <div class="auth-err" id="auth-err"></div>
@@ -294,7 +328,50 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 
 <div class="app" id="main-app" style="display:none">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
-    <div style="font-size:17px;font-weight:600">&#127759; Life Tracker</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <!-- scaffolding badge -->
+      <svg width="32" height="32" viewBox="0 0 160 160" style="flex-shrink:0">
+        <circle cx="80" cy="80" r="78" fill="#111"/>
+        <circle cx="80" cy="80" r="71" fill="none" stroke="#fff" stroke-width="1" opacity="0.12"/>
+        <line x1="38" y1="28" x2="38" y2="122" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity="0.9"/>
+        <line x1="70" y1="20" x2="70" y2="122" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity="0.9"/>
+        <line x1="102" y1="20" x2="102" y2="122" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity="0.9"/>
+        <line x1="134" y1="28" x2="134" y2="122" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity="0.9"/>
+        <line x1="28" y1="52" x2="144" y2="52" stroke="#5DCAA5" stroke-width="6" stroke-linecap="round"/>
+        <line x1="28" y1="78" x2="144" y2="78" stroke="#5DCAA5" stroke-width="6" stroke-linecap="round"/>
+        <line x1="28" y1="104" x2="144" y2="104" stroke="#5DCAA5" stroke-width="6" stroke-linecap="round"/>
+        <line x1="38" y1="52" x2="70" y2="78" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="70" y1="52" x2="38" y2="78" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="70" y1="52" x2="102" y2="78" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="102" y1="52" x2="70" y2="78" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="102" y1="52" x2="134" y2="78" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="134" y1="52" x2="102" y2="78" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="38" y1="78" x2="70" y2="104" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="70" y1="78" x2="38" y2="104" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="70" y1="78" x2="102" y2="104" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="102" y1="78" x2="70" y2="104" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="102" y1="78" x2="134" y2="104" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <line x1="134" y1="78" x2="102" y2="104" stroke="#fff" stroke-width="2.5" opacity="0.22"/>
+        <circle cx="38" cy="52" r="7" fill="#5DCAA5"/>
+        <circle cx="70" cy="52" r="7" fill="#5DCAA5"/>
+        <circle cx="102" cy="52" r="7" fill="#5DCAA5"/>
+        <circle cx="134" cy="52" r="7" fill="#5DCAA5"/>
+        <circle cx="38" cy="78" r="7" fill="#5DCAA5"/>
+        <circle cx="70" cy="78" r="7" fill="#5DCAA5"/>
+        <circle cx="102" cy="78" r="7" fill="#5DCAA5"/>
+        <circle cx="134" cy="78" r="7" fill="#5DCAA5"/>
+        <circle cx="38" cy="104" r="7" fill="#5DCAA5"/>
+        <circle cx="70" cy="104" r="7" fill="#5DCAA5"/>
+        <circle cx="102" cy="104" r="7" fill="#5DCAA5"/>
+        <circle cx="134" cy="104" r="7" fill="#5DCAA5"/>
+        <circle cx="38" cy="28" r="8" fill="#fff" opacity="0.5"/>
+        <circle cx="70" cy="20" r="8" fill="#fff" opacity="0.5"/>
+        <circle cx="102" cy="20" r="8" fill="#fff" opacity="0.5"/>
+        <circle cx="134" cy="28" r="8" fill="#fff" opacity="0.5"/>
+      </svg>
+      <!-- two-tone wordmark -->
+      <span style="font-size:18px;font-weight:700;letter-spacing:-0.5px;font-family:system-ui,-apple-system,sans-serif;color:#1a1a1a">Life<span style="color:#5DCAA5">Tracker</span></span>
+    </div>
     <div style="display:flex;align-items:center;gap:8px">
       <span class="status-bar" id="status-bar"></span>
       <div class="user-menu">
@@ -1128,7 +1205,7 @@ function renderNode(node, level){
     var bulkItems='';
     if(visRegs.length) bulkItems+='<button onclick="pauseAllRegs(\''+node.id+'\');closeMenu()">&#9646;&#9646; pause all</button>';
     if(hidRegs.length) bulkItems+='<button onclick="unpauseAllRegs(\''+node.id+'\');closeMenu()">&#9654; unpause all</button>';
-    menuHtml='<button class="na-btn" onclick="promptAddChild(\''+node.id+'\')">+item</button>'
+    menuHtml='<button class="na-btn" onclick="promptAddChild(\''+node.id+'\')">+subcategory</button>'
       +'<button class="na-btn" onclick="promptAddRegulation(\''+node.id+'\')">+regulation</button>'
       +'<div class="node-opts-wrap">'
       +'<button class="opts-btn" onclick="toggleMenu(\''+node.id+'\',event)">&#8943;</button>'
@@ -1182,8 +1259,8 @@ function cycleLog(nodeId){
   }
 }
 
-function promptAddChild(parentId){var l=prompt('New item name:');if(l)addNode(l,parentId,999,'regular');}
-function promptAddRegulation(parentId){var l=prompt('Regulation name (e.g. "morning", "before bed"):');if(l)addNode(l,parentId,999,'regulation');}
+function promptAddChild(parentId){var l=prompt('New subcategory name:');if(l)addNode(l,parentId,999,'regular');}
+function promptAddRegulation(parentId){var l=prompt('Regulation name (e.g. "take trash out", "clean my desk", "read 10 pages"):');if(l)addNode(l,parentId,999,'regulation');}
 function addRootNode(){var l=prompt('New area name:');if(l)addNode(l,null,999,'regular');}
 function promptRename(id,cur){var l=prompt('Rename:',cur);if(l)renameNode(id,l);}
 function promptDelete(id){if(confirm('Delete this item and all its children?'))deleteNode(id);}
