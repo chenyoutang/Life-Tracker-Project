@@ -979,22 +979,108 @@ async function loadNodes(){
 }
 async function seedDefaultNodes(){
   var uid=currentUser&&currentUser.user?currentUser.user.id:null;
+  var R=function(label,sched){return{label:label,type:'regulation',schedule:sched||{type:'daily',times:1}};};
+  var daily={type:'daily',times:1};
   var tree=[
-    {label:'Health',children:[
-      {label:'Hygiene',children:[
-        {label:'Shower'},{label:'Brush teeth'},{label:'Skincare'},
-        {label:'Tidiness',children:[{label:'Room'},{label:'Dishes'},{label:'Laundry',children:[{label:'Fold clothes'},{label:'Wash clothes'},{label:'Put away clothes'}]}]}
+    {label:'健康',children:[
+      {label:'衛生',children:[
+        {label:'整潔',children:[
+          {label:'房間',children:[
+            R('清理垃圾',{type:'every_n_days',n:3}),
+            R('物歸原位',{type:'every_n_days',n:3}),
+            R('打掃房間',{type:'month_day',mday:1})
+          ]},
+          {label:'碗筷',children:[
+            R('清潔流理台',{type:'every_n_days',n:7}),
+            R('洗碗筷',{type:'every_n_days',n:2})
+          ]},
+          {label:'衣服',children:[
+            R('折衣服',{type:'every_n_days',n:7}),
+            R('洗衣服',{type:'every_n_days',n:7}),
+            R('衣服歸位',daily)
+          ]}
+        ]},
+        {label:'沐浴',children:[
+          {label:'角膜塑形',children:[
+            R('戴鏡鏡',{type:'weekday',days:[0,1,2,3,4]}),
+            R('去角質',{type:'every_n_days',n:14})
+          ]},
+          R('剪指甲',{type:'every_n_days',n:14}),
+          R('刷牙',{type:'daily',times:2}),
+          R('洗澡',daily),
+          R('洗臉',daily),
+          R('刮鬍子',{type:'every_n_days',n:2})
+        ]}
       ]},
-      {label:'Diet',children:[{label:'Meal timing'},{label:'Meal quality'},{label:'Water intake'},{label:'Junk food'}]},
-      {label:'Sleep',children:[{label:'Wake time'},{label:'Bed time'},{label:'Sleep duration'}]},
-      {label:'Exercise'}
+      {label:'飲食',children:[
+        {label:'吃飯時間',children:[
+          R('有吃早餐',daily),
+          R('下午1點前吃完午餐',daily),
+          R('晚上8點半前吃晚餐',daily),
+          R('半夜12後不吃宵夜',daily)
+        ]},
+        {label:'吃飯品質',children:[
+          R('6-8分飽',daily)
+        ]},
+        {label:'喝水量',children:[
+          R('喝一公升的水',daily)
+        ]},
+        {label:'垃圾食物量',children:[
+          R('喝不超過兩杯飲料',daily),
+          R('適食少到兩餐',daily)
+        ]}
+      ]},
+      {label:'作息',children:[
+        {label:'睡眠',children:[
+          {label:'起床時間',children:[
+            R('在早上10點半前離開床',daily),
+            R('在早上8-10點起床',daily),
+            R('賴床不超過15分鐘',daily)
+          ]},
+          {label:'睡覺時間',children:[
+            R('在晚上11-2點間入睡',daily),
+            R('在晚上1點半前結束所有活動',daily)
+          ]},
+          {label:'睡眠時長',children:[
+            R('睡超過7小時',daily)
+          ]}
+        ]},
+        {label:'身心健康',children:[
+          R('抱怨性/無聊滑手機少於2小時',daily)
+        ]}
+      ]},
+      {label:'健身',children:[
+        R('過去3天做事任何運動共一小時',{type:'every_n_days',n:3}),
+        R('過去3天健身共超過20分鐘',{type:'every_n_days',n:3})
+      ]}
     ]},
-    {label:'Career'},{label:'Relationships'},{label:'Family'},{label:'Personal growth'}
+    {label:'事業',children:[
+      {label:'開銷'},
+      {label:'職涯'},
+      {label:'學習'},
+      {label:'副業'},
+      {label:'愛好'}
+    ]},
+    {label:'愛情'},
+    {label:'友情'},
+    {label:'家庭'}
   ];
+
   async function insert(items, parentId, order){
     for(var i=0;i<items.length;i++){
       var item=items[i];
-      var r=await fetch(api('checklist_nodes'),{method:'POST',headers:sbHeaders(),body:JSON.stringify({label:item.label,parent_id:parentId||null,sort_order:i,node_type:'regular',hidden_from_checkin:false,user_id:uid})});
+      var isReg=item.type==='regulation';
+      var body={
+        label:item.label,
+        parent_id:parentId||null,
+        sort_order:i,
+        node_type:isReg?'regulation':'regular',
+        hidden_from_checkin:false,
+        user_id:uid,
+        started:true
+      };
+      if(isReg&&item.schedule) body.schedule=item.schedule;
+      var r=await fetch(api('checklist_nodes'),{method:'POST',headers:sbHeaders(),body:JSON.stringify(body)});
       var d=await r.json(); var row=Array.isArray(d)?d[0]:d;
       nodes.push(row);
       if(item.children) await insert(item.children, row.id, 0);
