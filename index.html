@@ -129,7 +129,13 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 .dl-future{background:#F1EFE8;color:#5F5E5A}
 .del-btn{background:none;border:none;cursor:pointer;font-size:12px;color:#ccc;padding:2px 4px;border-radius:4px}
 .del-btn:hover{color:#666;background:#f0f0f0}
-.filter-row{display:flex;gap:5px;margin-bottom:.75rem;flex-wrap:wrap}
+.filter-row{display:flex;gap:5px;margin-bottom:.75rem;flex-wrap:wrap;align-items:center}
+.priority-toggle{padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:2px solid #ddd;background:#fff;color:#888;transition:all .15s}
+.priority-toggle.on{background:#111;color:#fff;border-color:#111}
+.note-btn{background:#f0f0f0;border:1px solid #ddd;border-radius:4px;padding:1px 6px;font-size:10px;cursor:pointer;color:#555;font-family:inherit;font-weight:500}
+.note-btn.has-notes{background:#E6F1FB;border-color:#378ADD;color:#185FA5}
+.show-notes-btn{padding:5px 12px;border:1px solid #ddd;border-radius:20px;font-size:12px;cursor:pointer;background:#fff;color:#666;font-family:inherit;margin-left:auto}
+.show-notes-btn.on{background:#E6F1FB;border-color:#378ADD;color:#185FA5;font-weight:500}
 .filter-btn{padding:4px 11px;border:1px solid #ddd;border-radius:20px;font-size:12px;cursor:pointer;background:#fff;color:#666;font-family:inherit}
 .filter-btn.active{background:#f0f0f0;color:#111;border-color:#bbb;font-weight:500}
 .nlp-row{display:flex;gap:8px;margin-bottom:6px}
@@ -370,8 +376,7 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
       <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="startCheckin()">▶ Daily check-in</button>
       <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="restartCheckin()">↺ re-check in</button>
       <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="addRootNode()">+ Add area</button>
-      <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="expandAllNodes()" title="expand all">⇊ expand all</button>
-      <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="collapseAllNodes()" title="collapse all">⇈ collapse all</button>
+      <button class="na-btn" style="padding:6px 14px;font-size:13px" onclick="toggleExpandCollapse()" id="expand-toggle-btn">⇊ expand all</button>
     </div>
     <div id="checkin-wrap" style="display:none"></div>
     <div id="tree-wrap"></div>
@@ -400,13 +405,16 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
       </div>
       <div class="nlp-preview" id="nlp-preview">Start typing to see a live preview…</div>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;flex-wrap:wrap">
+      <button class="priority-toggle" id="priority-btn" onclick="togglePriorityView()">&#127942; priority ranked</button>
+      <button class="show-notes-btn" id="show-notes-btn" onclick="toggleAllNotes()">show notes</button>
+    </div>
     <div class="filter-row">
       <button class="filter-btn active" onclick="setFilter('all')">all</button>
       <button class="filter-btn" onclick="setFilter('hard')">hard</button>
       <button class="filter-btn" onclick="setFilter('soft')">soft</button>
       <button class="filter-btn" onclick="setFilter('longterm')">long-term</button>
       <button class="filter-btn" onclick="setFilter('repeat')">repeating</button>
-      <button class="filter-btn" id="priority-btn" onclick="togglePriorityView()">&#127942; priority</button>
     </div>
     <div id="priority-view" style="display:none"></div>
     <div id="all-tasks" class="task-list"></div>
@@ -1340,12 +1348,31 @@ function cycleLog(nodeId){
   }
 }
 
-function expandAllNodes(){
-  nodes.forEach(function(n){if(!isRegulation(n)&&childrenOf(n.id).length>0)expanded[n.id]=true;});
+function toggleExpandCollapse(){
+  // check if all expandable nodes are already expanded
+  var expandable=nodes.filter(function(n){return !isRegulation(n)&&childrenOf(n.id).length>0;});
+  var allExpanded=expandable.every(function(n){return expanded[n.id]===true;});
+  var btn=document.getElementById('expand-toggle-btn');
+  if(allExpanded){
+    // collapse all
+    expanded={};
+    if(btn){btn.textContent='⇊ expand all';}
+  } else {
+    // expand all
+    expandable.forEach(function(n){expanded[n.id]=true;});
+    if(btn){btn.textContent='⇈ collapse all';}
+  }
   renderTree();
 }
-function collapseAllNodes(){
-  expanded={};renderTree();
+
+var showAllNotes=false;
+function toggleAllNotes(){
+  showAllNotes=!showAllNotes;
+  var btn=document.getElementById('show-notes-btn');
+  if(btn){btn.textContent=showAllNotes?'hide notes':'show notes';btn.classList.toggle('on',showAllNotes);}
+  document.querySelectorAll('.task-notes-wrap').forEach(function(el){
+    el.style.display=showAllNotes?'block':'none';
+  });
 }
 function promptAddChild(parentId){var l=prompt('New subcategory name:');if(l)addNode(l,parentId,999,'regular');}
 function promptAddRegulation(parentId){var l=prompt('Regulation name (e.g. "take trash out", "clean my desk", "read 10 pages"):');if(l)addNode(l,parentId,999,'regulation');}
@@ -1703,15 +1730,12 @@ function deadlineBadge(t){
 }
 function taskHTML(t){
   var rep=t.repeat?'<span class="tag tag-repeat" style="font-size:10px">&#8635; '+t.repeat+'</span>':'';
-  var notesBtn=t.notes
-    ?'<button class="del-btn" onclick="toggleTaskNotes(\''+t.id+'\')" title="notes" style="color:#185FA5;font-size:11px">&#128221;</button>'
-    :'<button class="del-btn" onclick="toggleTaskNotes(\''+t.id+'\')" title="add notes" style="color:#ccc;font-size:11px">&#128221;</button>';
-  var notesSection=document.getElementById?'':(t.notes?'<div class="task-notes" id="tn-'+t.id+'">'+escHtml(t.notes)+'</div>':'');
+  var noteBtn='<button class="note-btn'+(t.notes?' has-notes':'')+'" onclick="toggleTaskNotes(\''+t.id+'\')">'+(t.notes?'note':'note')+'</button>';
   return'<div class="task-item'+(t.done?' done':'')+'" id="ti-'+t.id+'">'
     +'<div class="task-check'+(t.done?' checked':'')+'" onclick="toggleTask(\''+t.id+'\')">'+( t.done?'&#10003;':'')+'</div>'
     +'<span class="task-title">'+escHtml(t.title)+'</span>'
     +'<span class="task-meta"><span class="tag tag-'+t.type+'">'+t.type+'</span>'+rep+deadlineBadge(t)
-    +notesBtn
+    +noteBtn
     +'<button class="del-btn" onclick="openEditModal(\''+t.id+'\')" title="edit" style="color:#aaa">&#9998;</button>'
     +'<button class="del-btn" onclick="deleteTask(\''+t.id+'\')">&#10005;</button></span>'
     +'<div class="task-notes-wrap" id="tnw-'+t.id+'" style="display:none;width:100%;padding:6px 4px 2px 36px">'
@@ -1722,9 +1746,9 @@ function taskHTML(t){
 function toggleTaskNotes(id){
   var wrap=document.getElementById('tnw-'+id);
   if(!wrap)return;
-  var hidden=wrap.style.display==='none';
-  wrap.style.display=hidden?'':'none';
-  if(hidden){var ta=document.getElementById('tni-'+id);if(ta)ta.focus();}
+  var hidden=wrap.style.display==='none'||wrap.style.display==='';
+  wrap.style.display=hidden?'block':'none';
+  if(hidden){var ta=document.getElementById('tni-'+id);if(ta)setTimeout(function(){ta.focus();},50);}
 }
 async function saveTaskNotes(id){
   var ta=document.getElementById('tni-'+id);if(!ta)return;
@@ -2710,7 +2734,8 @@ var priorityDragId=null;
 
 function togglePriorityView(){
   showPriority=!showPriority;
-  document.getElementById('priority-btn').classList.toggle('active',showPriority);
+  var btn=document.getElementById('priority-btn');
+  if(btn)btn.classList.toggle('on',showPriority);
   document.getElementById('priority-view').style.display=showPriority?'':'none';
   document.getElementById('all-tasks').style.display=showPriority?'none':'';
   document.getElementById('lt-section').style.display=showPriority?'none':'';
@@ -2813,6 +2838,10 @@ function renderAll(){
     var lt=tasks.filter(function(t){return t.type==='longterm';});
     var lts=document.getElementById('lt-section');
     if(listFilter==='all'&&lt.length){lts.style.display='';document.getElementById('lt-tasks').innerHTML=lt.map(taskHTML).join('');}else lts.style.display='none';
+    // apply global notes state
+    if(showAllNotes){
+      document.querySelectorAll('.task-notes-wrap').forEach(function(el){el.style.display='block';});
+    }
   } else {
     renderPriority();
   }
