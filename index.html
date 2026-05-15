@@ -885,6 +885,26 @@ async function onSignedIn(isNew){
 }
 async function createProfile(){
   await fetch(SB_URL+'/rest/v1/profiles',{method:'POST',headers:sbHeaders(),body:JSON.stringify({id:currentUser.user.id,share_stats:false})});
+  await seedDefaultTasks();
+}
+async function seedDefaultTasks(){
+  var uid=currentUser&&currentUser.user?currentUser.user.id:null;
+  var monday=new Date(TODAY);
+  // find next Monday
+  var daysUntilMon=(1-monday.getDay()+7)%7||7;
+  monday.setDate(monday.getDate()+daysUntilMon);
+  var threeDays=new Date(TODAY);
+  threeDays.setDate(TODAY.getDate()+3);
+  var defaults=[
+    {title:'拯救世界',type:'longterm',deadline:null,repeat:null,done:false,notes:'💡 Change this to your own long-term goal!',priority:null,user_id:uid},
+    {title:'去上管風琴課',type:'hard',deadline:monday.toISOString().split('T')[0],repeat:'weekly',done:false,notes:'💡 Change this to your own recurring task!',priority:null,user_id:uid},
+    {title:'收信',type:'soft',deadline:threeDays.toISOString().split('T')[0],repeat:null,done:false,notes:'💡 Change this to your own task!',priority:null,user_id:uid}
+  ];
+  for(var i=0;i<defaults.length;i++){
+    var r=await fetch(api('tasks'),{method:'POST',headers:sbHeaders(),body:JSON.stringify(defaults[i])});
+    var d=await r.json();var row=Array.isArray(d)?d[0]:d;
+    tasks.push(dbToTask(row));
+  }
 }
 async function signOut(){
   await fetch(AUTH_URL+'/logout',{method:'POST',headers:Object.assign(authHeaders(),{'Authorization':'Bearer '+currentUser.access_token})});
