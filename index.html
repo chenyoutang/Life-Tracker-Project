@@ -191,6 +191,9 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
 
 /* cal mode toggle */
 .cal-mode-row{display:flex;gap:5px;margin-bottom:.75rem;flex-wrap:wrap}
+/* routine on calendar */
+.dot-routine-done{background:#E1F5EE;color:#0F6E56;font-size:9px;padding:1px 3px;border-radius:3px;margin-bottom:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dot-routine-todo{background:#f5f5f5;color:#888;font-size:9px;padding:1px 3px;border-radius:3px;margin-bottom:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-mode-btn{padding:4px 12px;border:1px solid #ddd;border-radius:20px;font-size:12px;cursor:pointer;background:#fff;color:#666;font-family:inherit}
 .cal-mode-btn.active{background:#f0f0f0;color:#111;border-color:#bbb;font-weight:500}
 
@@ -394,14 +397,19 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
   <!-- TASKS TAB -->
   <div id="tab-tasks" style="display:none">
     <div class="card">
-      <p class="hint">
-        <code>dentist next Friday hard</code> <code>pay rent every month hard</code>
-        <code>call mom tomorrow soft</code> <code>learn piano long term</code>
-        <code>submit report end of month hard</code> <code>review docs May 20 soft</code>
-      </p>
-      <div class="nlp-row">
-        <input class="nlp-input" id="nlp-in" placeholder="describe your task…" oninput="previewNLP()" onkeydown="if(event.key==='Enter')addFromNLP()"/>
-        <button class="nlp-btn" onclick="addFromNLP()">add &#8629;</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div class="nlp-row" style="margin-bottom:0;flex:1">
+          <input class="nlp-input" id="nlp-in" placeholder="add a task… e.g. dentist friday hard" oninput="previewNLP()" onkeydown="if(event.key==='Enter')addFromNLP()"/>
+          <button class="nlp-btn" onclick="addFromNLP()">add &#8629;</button>
+        </div>
+        <button onclick="toggleTaskInfo()" style="width:26px;height:26px;border-radius:50%;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;font-size:13px;font-weight:700;color:#888;flex-shrink:0" title="task type info">?</button>
+      </div>
+      <div id="task-info-panel" style="display:none;background:#f9f9f9;border:1px solid #eee;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;line-height:1.8;color:#555">
+        <strong style="color:#993C1D">hard</strong> — must be done by the deadline. shows as overdue if missed.<br>
+        <strong style="color:#0F6E56">soft</strong> — ideally done by the date but flexible. no penalty if late.<br>
+        <strong style="color:#185FA5">long-term</strong> — no deadline. someday pile. great for dreams and goals.<br>
+        <span style="color:#534AB7">↻ repeat</span> — add "every monday", "weekly", "monthly" to any task.<br>
+        <span style="color:#aaa;font-size:11px">tip: "dentist friday hard" · "call mom tomorrow soft" · "learn piano long term"</span>
       </div>
       <div class="nlp-preview" id="nlp-preview">Start typing to see a live preview…</div>
     </div>
@@ -434,6 +442,7 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a1a
       <button class="cal-mode-btn active" id="cmode-both" onclick="setCalMode('both')">events + tasks</button>
       <button class="cal-mode-btn" id="cmode-events" onclick="setCalMode('events')">events only</button>
       <button class="cal-mode-btn" id="cmode-tasks" onclick="setCalMode('tasks')">tasks only</button>
+      <button class="cal-mode-btn" id="cmode-routine" onclick="setCalMode('routine')">routine</button>
     </div>
     <div class="cal-header">
       <button class="cal-nav" onclick="calNav(-1)">&#8249;</button>
@@ -1806,6 +1815,10 @@ function parseNLP(raw){
   if(!title)title='Untitled task';
   return{title:title,deadline:deadline,type:type,repeat:repeat};
 }
+function toggleTaskInfo(){
+  var p=document.getElementById('task-info-panel');
+  if(p)p.style.display=p.style.display==='none'?'':'none';
+}
 function previewNLP(){
   var v=document.getElementById('nlp-in').value.trim();
   var el=document.getElementById('nlp-preview');
@@ -2551,8 +2564,40 @@ async function deleteEventFromModal(){
 // ── Calendar mode ─────────────────────────────────────────────────
 function setCalMode(m){
   calMode=m;
-  ['both','events','tasks'].forEach(function(x){document.getElementById('cmode-'+x).classList.toggle('active',x===m);});
+  ['both','events','tasks','routine'].forEach(function(x){
+    var el=document.getElementById('cmode-'+x);
+    if(el)el.classList.toggle('active',x===m);
+  });
   renderCal();
+}
+
+function routineOnDate(date){
+  // get all regulations scheduled for this date
+  var dateStr=date.toISOString().split('T')[0];
+  return checkableRegs().filter(function(n){
+    return regDueToday_forDate(n,date);
+  }).map(function(n){
+    var done=logs.some(function(l){return l.node_id===n.id&&l.date===dateStr&&l.status==='done';});
+    return{node:n,done:done};
+  });
+}
+
+function regDueToday_forDate(node,date){
+  // same as regDueToday but for an arbitrary date
+  var s=nodeSchedule(node);
+  if(node.started===false) return false;
+  if(!s) return true;
+  var dow=date.getDay();
+  var dom=date.getDate();
+  if(s.type==='daily'||s.type==='times_per_day') return true;
+  if(s.type==='every_n_days'){
+    var anchor=node.last_done_date?parseLocalDate(node.last_done_date):parseLocalDate(node.created_at?node.created_at.split('T')[0]:TODAY.toISOString().split('T')[0]);
+    var diff=Math.round((date-anchor)/86400000);
+    return diff>0&&diff%s.n===0;
+  }
+  if(s.type==='weekday') return (s.days||[]).indexOf(dow)>=0;
+  if(s.type==='month_day') return dom===s.mday;
+  return true;
 }
 
 // ── Calendar ──────────────────────────────────────────────────────
@@ -2633,12 +2678,29 @@ function renderWeek(){
 function renderDay(){
   var date=offsetDay(calOffset);
   document.getElementById('cal-title').textContent=date.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+
+  if(calMode==='routine'){
+    var rItems=routineOnDate(date);
+    var rows=rItems.map(function(r){
+      var cls=r.done?'dot-routine-done':'dot-routine-todo';
+      var path=ancestorLabels(r.node.id);
+      return'<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;margin-bottom:4px;background:'+(r.done?'#E1F5EE':'#f9f9f9')+';border:1px solid '+(r.done?'#9FE1CB':'#eee')+'">'
+        +'<span style="font-size:14px">'+(r.done?'✓':'○')+'</span>'
+        +'<div><div style="font-size:13px;font-weight:500;color:'+(r.done?'#0F6E56':'#333')+'">'+escHtml(r.node.label)+'</div>'
+        +(path?'<div style="font-size:10px;color:#aaa">'+escHtml(path)+'</div>':'')
+        +'</div></div>';
+    }).join('');
+    var summary=rItems.length
+      ?'<div style="font-size:12px;color:#aaa;margin-bottom:.75rem">'+rItems.filter(function(r){return r.done;}).length+' / '+rItems.length+' done today</div>'
+      :'';
+    document.getElementById('cal-body').innerHTML=summary+(rows||'<p class="empty-state">no regulations scheduled today</p>');
+    return;
+  }
+
   var evs=calMode!=='tasks'?eventsOnDate(date):[];
   var tks=calMode!=='events'?tasksOnDate(date):[];
   var allDayEvs=evs.filter(function(e){return !e.start_time;});
   var timedEvs=evs.filter(function(e){return !!e.start_time;});
-
-  // all-day banner
   var bannerItems=allDayEvs.map(function(e){
     return'<div class="allday-chip ev-'+e.color+'" onclick="openEventModal(\''+e.id+'\',null)">'+escHtml(e.title)+'</div>';
   });
@@ -2648,8 +2710,6 @@ function renderDay(){
     +bannerItems.join('')
     +'<button class="na-btn" style="font-size:10px;padding:1px 7px;margin-left:auto" onclick="openEventModal(null,offsetDay(calOffset),null,null,true)">+ all day</button>'
     +'</div>';
-
-  // hourly timeline
   var hours=[];
   for(var h=0;h<24;h++){
     var label=h===0?'12am':h<12?h+'am':h===12?'12pm':(h-12)+'pm';
@@ -2673,6 +2733,7 @@ function renderDay(){
   document.getElementById('cal-body').innerHTML=banner+addBtn+'<div class="day-timeline" id="day-tl">'+hours.join('')+'</div>';
   setTimeout(function(){var tl=document.getElementById('day-tl');if(tl)tl.scrollTop=8*48;},50);
 }
+
 
 // ── Day drag-to-create ────────────────────────────────────────────
 var dayDragH0=null,dayDragOffset=null,dayDragActive=false;
@@ -2706,20 +2767,24 @@ function dayDragEnd(e,h,off){
 function renderWeek(){
   var sw=new Date(TODAY);sw.setDate(TODAY.getDate()-TODAY.getDay()+calOffset*7);
   var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
-  // week drag state
   var wOff=calOffset;
   var cols=days.map(function(name,i){
     var date=new Date(sw);date.setDate(sw.getDate()+i);
     var iT=sameDay(date,TODAY);
-    var evs=calMode!=='tasks'?eventsOnDate(date):[];
-    var tks=calMode!=='events'?tasksOnDate(date):[];
     var items='';
-    evs.forEach(function(e){
-      items+='<div class="week-task ev-'+e.color+'" onclick="openEventModal(\''+e.id+'\',null);event.stopPropagation()" style="cursor:pointer">'
-        +(e.start_time?fmtTime(e.start_time)+' ':'')+escHtml(e.title)+'</div>';
-    });
-    tks.forEach(function(t){items+='<div class="week-task dot-'+t.type+'">'+escHtml(t.title)+'</div>';});
+    if(calMode==='routine'){
+      var rItems=routineOnDate(date);
+      rItems.slice(0,6).forEach(function(r){
+        var cls=r.done?'dot-routine-done':'dot-routine-todo';
+        items+='<div class="'+cls+'">'+(r.done?'✓ ':'')+escHtml(r.node.label)+'</div>';
+      });
+      if(rItems.length>6) items+='<div style="font-size:9px;color:#aaa">+'+( rItems.length-6)+' more</div>';
+    } else {
+      var evs=calMode!=='tasks'?eventsOnDate(date):[];
+      var tks=calMode!=='events'?tasksOnDate(date):[];
+      evs.forEach(function(e){items+='<div class="week-task ev-'+e.color+'" onclick="openEventModal(\''+e.id+'\',null);event.stopPropagation()" style="cursor:pointer">'+(e.start_time?fmtTime(e.start_time)+' ':'')+escHtml(e.title)+'</div>';});
+      tks.forEach(function(t){items+='<div class="week-task dot-'+t.type+'">'+escHtml(t.title)+'</div>';});
+    }
     var dayOff=Math.round((date-TODAY)/86400000);
     return'<div class="week-col'+(iT?' today-col':'')+'" data-dayoff="'+dayOff+'"'
       +' onmousedown="weekDragStart(event,'+dayOff+')"'
