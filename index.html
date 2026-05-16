@@ -1008,37 +1008,38 @@ async function loadNodes(){
 }
 async function seedDefaultNodes(){
   var uid=currentUser&&currentUser.user?currentUser.user.id:null;
-  var R=function(label,sched){return{label:label,type:'regulation',schedule:sched||{type:'daily',times:1}};};
+  var R=function(label,sched,strict){return{label:label,type:'regulation',schedule:sched||{type:'daily',times:1},strictness:strict||'strict'};};
+  var sit=function(label,sched){return R(label,sched,'situational');};
   var daily={type:'daily',times:1};
   var tree=[
     {label:'健康',children:[
       {label:'衛生',children:[
         {label:'整潔',children:[
           {label:'房間',children:[
-            R('清理垃圾',{type:'every_n_days',n:3}),
-            R('物歸原位',{type:'every_n_days',n:3}),
-            R('打掃房間',{type:'month_day',mday:1})
+            sit('清理垃圾',{type:'every_n_days',n:3}),
+            sit('物歸原位',{type:'every_n_days',n:3}),
+            sit('打掃房間',{type:'month_day',mday:1})
           ]},
           {label:'碗筷',children:[
-            R('清潔流理台',{type:'every_n_days',n:7}),
-            R('洗碗筷',{type:'every_n_days',n:2})
+            sit('清潔流理台',{type:'every_n_days',n:7}),
+            sit('洗碗筷',{type:'every_n_days',n:2})
           ]},
           {label:'衣服',children:[
-            R('折衣服',{type:'every_n_days',n:7}),
-            R('洗衣服',{type:'every_n_days',n:7}),
-            R('衣服歸位',daily)
+            sit('折衣服',{type:'every_n_days',n:7}),
+            sit('洗衣服',{type:'every_n_days',n:7}),
+            sit('衣服歸位',daily)
           ]}
         ]},
         {label:'沐浴',children:[
           {label:'角膜塑形',children:[
-            R('戴鏡鏡',{type:'weekday',days:[0,1,2,3,4]}),
-            R('去角質',{type:'every_n_days',n:14})
+            sit('戴眼鏡鏡',{type:'weekday',days:[0,1,2,3,4]}),
+            sit('去角質',{type:'every_n_days',n:14})
           ]},
-          R('剪指甲',{type:'every_n_days',n:14}),
+          sit('剪指甲',{type:'every_n_days',n:14}),
           R('刷牙',{type:'daily',times:2}),
           R('洗澡',daily),
           R('洗臉',daily),
-          R('刮鬍子',{type:'every_n_days',n:2})
+          sit('刮鬍子',{type:'every_n_days',n:2})
         ]}
       ]},
       {label:'飲食',children:[
@@ -1079,8 +1080,8 @@ async function seedDefaultNodes(){
         ]}
       ]},
       {label:'健身',children:[
-        R('過去3天做事任何運動共一小時',{type:'every_n_days',n:3}),
-        R('過去3天健身共超過20分鐘',{type:'every_n_days',n:3})
+        sit('過去3天做事任何運動共一小時',{type:'every_n_days',n:3}),
+        sit('過去3天健身共超過20分鐘',{type:'every_n_days',n:3})
       ]}
     ]},
     {label:'事業',children:[
@@ -1105,6 +1106,7 @@ async function seedDefaultNodes(){
         sort_order:i,
         node_type:isReg?'regulation':'regular',
         hidden_from_checkin:false,
+        strictness:item.strictness||'strict',
         user_id:uid,
         started:true
       };
@@ -1117,6 +1119,7 @@ async function seedDefaultNodes(){
   }
   await insert(tree, null, 0);
 }
+
 async function addNode(label, parentId, order, nodeType){
   var type=nodeType||'regular';
   var sched=type==='regulation'?{type:'daily',times:1}:null;
